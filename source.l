@@ -1,16 +1,18 @@
 %{
 #define LIST     strcat(buf,yytext)
-#define token(t) {LIST; printf("<%s>\n","t");}
-#define tokenInteger(t,i) {LIST; printf("<%s:%d>\n","t",i);}
-#define tokenString(t,s) {LIST; printf("<%s:%s>\n","t",s);}
+#define token(t) {LIST; printf("<%s>\n",#t);}
+#define tokenInteger(t,i) {LIST; printf("<%s: %s>\n",#t,i);}
+#define tokenString(t,s) {LIST; printf("<%s: %s>\n",#t,s);}
 
 #define MAX_LINE_LENG 256
+#define yyerror {printf("invalid string\n"); exit(-1);}
 
 int linenum = 1;
 char buf[MAX_LINE_LENG];
+char strBuf[MAX_LINE_LENG];
 %}
 
-%x COMMENT STR
+%x STR
 
 %%
 "("             {token('(');}
@@ -28,6 +30,15 @@ char buf[MAX_LINE_LENG];
 "*"	        {token('*');}
 "/"	        {token('/');}
 "mod"	        {token('mod');}
+":="	        {token(':=');}
+"<"	        {token('<');}
+"<="	        {token('<=');}
+">="	        {token('>=');}
+">"	        {token('>');}
+"="	        {token('=');}
+"not ="	        {token('not =');}
+"and"	        {token('and');}
+"not"	        {token('not');}
 "array"	        {token('array');}
 "begin"	        {token('begin');}
 "bool"	        {token('bool');}
@@ -59,31 +70,33 @@ char buf[MAX_LINE_LENG];
 "var"	        {token('var');}
 "when"	        {token('when');}
 [0-9]+	        {tokenInteger(integer, yytext);}
-(0|([1-9][0-9]*))"."[0-9]+	{tokenString(real, yytext);}
-[0-9]+"."[0-9]+[Ee][+-]?[0-9]+  {tokenString(real_exp, yytext);}
-[A-Za-z]([A-Za-z]|[0-9]+)*	{tokenString(id, yytext);}
+[+-]?(0|([1-9][0-9]*))"."[0-9]+	{tokenString(real, yytext);}
+[0-9]+"."[0-9]+[Ee][+-]?[0-9]+ 	{tokenString(real, yytext);}
+[A-Za-z]([A-Za-z]|[0-9]+)*		{tokenString(id, yytext);}
 
 "\"" {
         LIST;
-        BEGIN STR; 
+        BEGIN STR;
 }
 
-<STR> "\"" {
-        char c = yyinput();
+<STR>"\"" {
+        char c = input();
         if(c != '\"'){
-                tokenString(string, strBuf);
-                strBuf[0]='/0';
-                BEGIN INITIAL;
+        	tokenString(string, strBuf);
+        	unput(c);
+        	strBuf[0]='\0';
+        	BEGIN INITIAL;	
         }
         else{
-                LIST;
-                strcat(strBuf,'\"');
+        	LIST;
+        	strcat(buf,"\"");
+        	strcat(strBuf,"\"");     	
         }
 }
 
-<STR> [^"\n]* { //string content
-        LIST;
-        strcat(strBuf, yytext);
+<STR>([^"\n])* {
+	LIST;
+	strcat(strBuf, yytext);
 }
 
 \n      {
@@ -92,14 +105,14 @@ char buf[MAX_LINE_LENG];
         buf[0] = '\0';
         }
 
-[ \t]*  {LIST;}
+[ \t]*	{LIST;}
 
-.       {
+.	{
         LIST;
         printf("%d:%s\n", linenum+1, buf);
         printf("bad character:'%s'\n",yytext);
         exit(-1);
-        }
+}
 %%
 int main(){
         while(1){
