@@ -12,7 +12,7 @@ char buf[MAX_LINE_LENG];
 char strBuf[MAX_LINE_LENG];
 %}
 
-%x STR
+%x STR COMMENT_SINGLE COMMENT_MUL
 
 %%
 "("             {token('(');}
@@ -97,6 +97,17 @@ char strBuf[MAX_LINE_LENG];
 <STR>([^"\n])* {
 	LIST;
 	strcat(strBuf, yytext);
+}
+
+"%"    {
+        LIST;
+        BEGIN COMMENT_SINGLE;
+}
+<COMMENT_SINGLE> .* {LIST;}
+<COMMENT_SINGLE> "\n" {
+        printf("%d: %s", linenum++, buf);
+        buf[0] = '\0';
+        BEGIN INITIAL;
 }
 
 \n      {
