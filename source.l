@@ -10,65 +10,81 @@ int linenum = 1;
 char buf[MAX_LINE_LENG];
 %}
 
-digits	[0-9]+
-integer	{digits}
-plain_real	(0|([1-9][0-9]*))"."[0-9]+
-expreal	{digits}"."{digits}[Ee][+-]?{digits}
-real	{plain_real}|{expreal}
-letter	[A-Za-z]
-id		{letter}({letter}|{digits})*
-
-%s		COMMENT
+%x COMMENT STR
 
 %%
-<INITIAL>	"("     {token('(');}
-<INITIAL>	")"		{token(')');}
-<INITIAL>	"["     {token('[');}
-<INITIAL>	"]"		{token(']');}
-<INITIAL>	"{"     {token('{');}
-<INITIAL>	"}"		{token('}');}
-<INITIAL>	","		{token(',');}
-<INITIAL>	"."		{token('.');}
-<INITIAL>	":"		{token(':');}
-<INITIAL>	";"		{token(';');}
-<INITIAL>	"+"		{token('+');}
-<INITIAL>	"-"		{token('-');}
-<INITIAL>	"*"		{token('*');}
-<INITIAL>	"/"		{token('/');}
-<INITIAL>	"mod"	{token('mod');}
-<INITIAL>	"array"	{token('array');}
-<INITIAL>	"begin"	{token('begin');}
-<INITIAL>	"bool"	{token('bool');}
-<INITIAL>	"char"	{token('char');}
-<INITIAL>	"const"	{token('const');}
-<INITIAL>	"decreasing"	{token('decreasing');}
-<INITIAL>	"default"	{token('default');}
-<INITIAL>	"do"	{token('do');}
-<INITIAL>	"else"	{token('else');}
-<INITIAL>	"end"	{token('end');}
-<INITIAL>	"exit"	{token('exit');}
-<INITIAL>	"false"	{token('false');}
-<INITIAL>	"for"	{token('for');}
-<INITIAL>	"function"	{token('function');}
-<INITIAL>	"get"	{token('get');}
-<INITIAL>	"if"	{token('if');}
-<INITIAL>	"int"	{token('int');}
-<INITIAL>	"loop"	{token('loop');}
-<INITIAL>	"of"	{token('of');}
-<INITIAL>	"put"	{token('put');}
-<INITIAL>	"procedure"	{token('procedure');}
-<INITIAL>	"real"	{token('real');}
-<INITIAL>	"result"	{token('result');}
-<INITIAL>	"return"	{token('return');}
-<INITIAL>	"skip"	{token('skip');}
-<INITIAL>	"string"	{token('string');}
-<INITIAL>	"then"	{token('then');}
-<INITIAL>	"true"	{token('true');}
-<INITIAL>	"var"	{token('var');}
-<INITIAL>	"when"	{token('when');}
-<INITIAL>	digits	{tokenInteger(integer, yytext);}
-<INITIAL>	real	{tokenString(real, yytext);}
-<INITIAL>	id		{tokenString(id, yytext);}
+"("             {token('(');}
+")"	        {token(')');}
+"["             {token('[');}
+"]"	        {token(']');}
+"{"             {token('{');}
+"}"	        {token('}');}
+","	        {token(',');}
+"."	        {token('.');}
+":"	        {token(':');}
+";"	        {token(';');}
+"+"	        {token('+');}
+"-"	        {token('-');}
+"*"	        {token('*');}
+"/"	        {token('/');}
+"mod"	        {token('mod');}
+"array"	        {token('array');}
+"begin"	        {token('begin');}
+"bool"	        {token('bool');}
+"char"	        {token('char');}
+"const"	        {token('const');}
+"decreasing"    {token('decreasing');}
+"default"       {token('default');}
+"do"	        {token('do');}
+"else"	        {token('else');}
+"end"	        {token('end');}
+"exit"	        {token('exit');}
+"false"	        {token('false');}
+"for"	        {token('for');}
+"function"      {token('function');}
+"get"	        {token('get');}
+"if"	        {token('if');}
+"int"	        {token('int');}
+"loop"	        {token('loop');}
+"of"	        {token('of');}
+"put"	        {token('put');}
+"procedure"     {token('procedure');}
+"real"	        {token('real');}
+"result"        {token('result');}
+"return"        {token('return');}
+"skip"	        {token('skip');}
+"string"        {token('string');}
+"then"	        {token('then');}
+"true"	        {token('true');}
+"var"	        {token('var');}
+"when"	        {token('when');}
+[0-9]+	        {tokenInteger(integer, yytext);}
+(0|([1-9][0-9]*))"."[0-9]+	{tokenString(real, yytext);}
+[0-9]+"."[0-9]+[Ee][+-]?[0-9]+  {tokenString(real_exp, yytext);}
+[A-Za-z]([A-Za-z]|[0-9]+)*	{tokenString(id, yytext);}
+
+"\"" {
+        LIST;
+        BEGIN STR; 
+}
+
+<STR> "\"" {
+        char c = yyinput();
+        if(c != '\"'){
+                tokenString(string, strBuf);
+                strBuf[0]='/0';
+                BEGIN INITIAL;
+        }
+        else{
+                LIST;
+                strcat(strBuf,'\"');
+        }
+}
+
+<STR> [^"\n]* { //string content
+        LIST;
+        strcat(strBuf, yytext);
+}
 
 \n      {
         LIST;
