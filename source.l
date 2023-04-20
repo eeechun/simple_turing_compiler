@@ -113,6 +113,24 @@ char strBuf[MAX_LINE_LENG];
         BEGIN INITIAL;
 }
 
+"{%"	{
+	LIST;
+	BEGIN COMMENT_MUL;
+}
+<COMMENT_MUL>.* {LIST;}
+<COMMENT_MUL>"\n" {
+	LIST;
+	printf("%d: %s\n", linenum++, buf);
+	buf[0] = '\0';
+	
+}
+<COMMENT_MUL>"%}" {
+        LIST;  
+        printf("comment end\n");
+        buf[0] = '\0';
+        BEGIN INITIAL;
+}
+
 \n      {
         LIST;
         printf("%d: %s", linenum++, buf);
