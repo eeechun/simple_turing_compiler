@@ -219,7 +219,7 @@ int symbolTable::insert(const string& s){
 
 int symbolTable::dump(){
 	for(auto i : symbol) cout << i << "\n";
-	cout<< symbol.size();
+	return symbol.size();
 }
 
 
