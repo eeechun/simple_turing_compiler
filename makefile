@@ -8,4 +8,4 @@ lex.yy.cpp : source.l
 		lex source.l
 		mv lex.yy.c lex.yy.cpp
 clean :
-	rm - f p1.out lex.yy.*
+	rm -f p1.out lex.yy.*
