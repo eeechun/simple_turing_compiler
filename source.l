@@ -93,12 +93,14 @@ symbolTable *table;
 "var"	        {token(VAR);}
 "when"	        {token(WHEN);}
 [0-9]+	        {tokenInteger(integer, yytext);}
-[+-]?(0|([1-9][0-9]*))"."[0-9]+	{tokenString(real, yytext);}
+(0|([1-9][0-9]*))"."[0-9]+	{tokenString(real, yytext);}
 [0-9]+"."[0-9]+[Ee][+-]?[0-9]+ 	{tokenString(real, yytext);}
 [A-Za-z]([A-Za-z]|[0-9]+)*		{
 	str_flag = 0;
 	tokenString(id, yytext);
-	table->insert(yytext);
+	if(table->lookup(yytext) == -1){
+		table->insert(yytext);
+	}
 }
 
 "\"" {
@@ -202,19 +204,13 @@ int symbolTable::lookup(const string& s){
 		return -1;
 	}
 	else{
-		return stoi(*it);
+		return distance(symbol.begin(), it);
 	}
 }
 
 int symbolTable::insert(const string& s){
-	if(find(symbol.begin(), symbol.end(), s) == symbol.end()){
-		symbol.push_back(s);
-		return symbol.size();
-		
-	}
-	else{
-		return -1;
-	}
+	symbol.push_back(s);
+	return symbol.size();
 }
 
 int symbolTable::dump(){
