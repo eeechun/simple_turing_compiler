@@ -7,7 +7,7 @@
 #include <unistd.h>
 using namespace std;
 #define LIST     strcat(buf,yytext)
-#define token(t) {LIST; printf("<%s>\n",#t);}
+#define token(t) {LIST; printf("<%s>\n",#t); return(t);}
 #define tokenInteger(t,i) {LIST; printf("<%s: %s>\n",#t,i);}
 #define tokenString(t,s) {LIST; printf("<%s: %s>\n",#t,s);}
 #define yyinput input
@@ -20,46 +20,34 @@ int str_init = 0;
 char buf[MAX_LINE_LENG];
 char strBuf[MAX_LINE_LENG];
 
-class symbolTable{
-private:
-	vector<string> symbol;
-	
-public:
-	symbolTable();
-	int lookup(const string& s);
-	int insert(const string& s);
-	int dump();
-};
-
-symbolTable *table;
 %}
 
 %x STR
 %x COMMENT
 
 %%
-"("             {token('(');}
-")"	        {token(')');}
-"["             {token('[');}
-"]"	        {token(']');}
-"{"             {token('{');}
-"}"	        {token('}');}
-","	        {token(',');}
-"."	        {token('.');}
-":"	        {token(':');}
-";"	        {token(';');}
-"+"	        {token('+');}
-"-"	        {token('-');}
-"*"	        {token('*');}
-"/"	        {token('/');}
-"mod"	        {token('mod');}
-":="	        {token(':=');}
-"<"	        {token('<');}
-"<="	        {token('<=');}
-">="	        {token('>=');}
-">"	        {token('>');}
-"="	        {token('=');}
-"not ="	        {token('not =');}
+"("         	{token(PARENTHESES_L);}
+")"	        	{token(PARENTHESES_R);}
+"["         	{token(SQUARE_BRACKETS_L);}
+"]"	        	{token(SQUARE_BRACKETS_R);}
+"{"         	{token(BRACKETS_L);}
+"}"	        	{token(BRACKETS_R);}
+","	        	{token(COMMA);}
+"."	        	{token(DOT);}
+":"	        	{token(COLON);}
+";"	        	{token(SEMICOLON);}
+"+"	        	{token(ADD);}
+"-"	        	{token(SUB);}
+"*"	        	{token(MUL);}
+"/"	        	{token(DIV);}
+"mod"	    	{token(MOD);}
+":="	    	{token(ASSIGN);}
+"<"	        	{token(LT);}
+"<="	    	{token(LE);}
+">="	    	{token(GE);}
+">"	        	{token(GT);}
+"="	        	{token(EQ);}
+"not ="	        {token(NE);}
 "and"	        {token(AND);}
 "not"	        {token(NOT);}
 "array"	        {token(ARRAY);}
@@ -73,7 +61,6 @@ symbolTable *table;
 "else"	        {token(ELSE);}
 "end"	        {token(END);}
 "exit"	        {token(EXIT);}
-"false"	        {token(FALSE);}
 "for"	        {token(FOR);}
 "function"      {token(FUNCTION);}
 "get"	        {token(GET);}
@@ -89,18 +76,36 @@ symbolTable *table;
 "skip"	        {token(SKIP);}
 "string"        {token(STRING);}
 "then"	        {token(THEN);}
-"true"	        {token(TRUE);}
 "var"	        {token(VAR);}
 "when"	        {token(WHEN);}
-[0-9]+	        {tokenInteger(integer, yytext);}
-(0|([1-9][0-9]*))"."[0-9]+	{tokenString(real, yytext);}
-[0-9]+"."[0-9]+[Ee][+-]?[0-9]+ 	{tokenString(real, yytext);}
+"false"	        {
+	yylval.boolVal = false;
+	return BOOL_VAL;
+}
+"true"	        {
+	yylval.boolVal = true;
+	return BOOL_VAL;
+}
+[0-9]+	        {
+	tokenInteger(integer, yytext);
+	yylval.intVal = atoi(yytext);
+	return INT_VAL;
+}
+(0|([1-9][0-9]*))"."[0-9]+	{
+	tokenString(real, yytext);
+	yylval.dVal = atof(yytext);
+	return REAL_VAL
+}
+[0-9]+"."[0-9]+[Ee][+-]?[0-9]+ 	{
+	tokenString(real, yytext);
+	yylval.dVal = atof(yytext);
+	return REAL_VAL;	
+}
 [A-Za-z]([A-Za-z]|[0-9]+)*		{
 	str_flag = 0;
-	tokenString(id, yytext);
-	if(table->lookup(yytext) == -1){
-		table->insert(yytext);
-	}
+	tokenString("id",yytext);
+	yylval.strVal = new string(yytext);
+	return ID;
 }
 
 "\"" {
@@ -114,20 +119,16 @@ symbolTable *table;
         char c = yyinput();
         if(c != '\"'){
         	if(!flag && c != '\n'){
-        		//unput(c);
-        		/*if(!str_flag && str_init){ 
-        			printf("<\">\n");
-        			str_flag = 0;
-        		}*/
         		str_flag = 0;
         		BEGIN INITIAL;
         	}
         	flag = 0; 
         	str_flag = 1;
-        	tokenString(string, strBuf);
+			tokenString(string, strBuf);
+			yylval.strVal = new string(strBuf);
         	unput(c);
-        	//strBuf[0]='\0';
         	BEGIN INITIAL;
+			return STR_VAL;	
         }
         else{
         	LIST;
@@ -146,9 +147,10 @@ symbolTable *table;
 		printf("<\">\n");
 	}
 	if(strBuf[0] != '\0'){
-		tokenString(id, strBuf);
-		table->insert(strBuf);
-	}	
+		tokenString(id, yytext);
+		yylval.strVal = new string(strBuf);
+		return ID;
+	}
 	unput('\n');
 	BEGIN INITIAL;
 }
@@ -190,39 +192,3 @@ symbolTable *table;
         exit(-1);
 }
 %%
-void create(){
-	table = new symbolTable();
-}
-
-symbolTable::symbolTable(){
-	symbol.clear();
-}
-
-int symbolTable::lookup(const string& s){
-	vector<string>::iterator it = find(symbol.begin(), symbol.end(), s);
-	if(it == symbol.end()){
-		return -1;
-	}
-	else{
-		return distance(symbol.begin(), it);
-	}
-}
-
-int symbolTable::insert(const string& s){
-	symbol.push_back(s);
-	return symbol.size();
-}
-
-int symbolTable::dump(){
-	for(auto i : symbol) cout << i << "\n";
-	return symbol.size();
-}
-
-
-int main(){
-        create();
-        yylex();
-        cout << "Symbol Table:\n";
-        table->dump();
-        return 0;
-}
