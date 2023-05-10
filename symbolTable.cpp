@@ -40,7 +40,7 @@ int symbolTable::dump(){
 		if(typeid(i.val).name() == "d") cout << setw(colWidth) << i.val.dVal << setw(colWidth) << i.flag << "\n";
 		else if(typeid(i.val).name() == "i")cout << setw(colWidth) << i.val.intVal << setw(colWidth) << i.flag << "\n";
 		else if(typeid(i.val).name() == "NSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE"){
-			cout << setw(colWidth) << i.val.intVal << setw(colWidth) << i.flag << "\n";
+			cout << setw(colWidth) << i.val.strVal << setw(colWidth) << i.flag << "\n";
 		}
 	}
 	return symbols.size();
