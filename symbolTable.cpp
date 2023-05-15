@@ -18,6 +18,16 @@ int symbolTable::lookup(string id){
 	}
 }
 
+Symbol* symbolTable::getDetail(string id){
+	vector<Symbol>::iterator it = find_if(symbols.begin(), symbols.end(), [id](const Symbol& s) { return s.name == id; });
+	if(it == symbols.end()){
+		return nullptr;
+	}
+	else{
+		return { &(symbols.at(distance(symbols.begin(), it))) };
+	}
+}
+
 int symbolTable::insert(string id, string sscope, string stype, Value sval, int sflag){
 	Symbol detail;
 	detail.name = id;

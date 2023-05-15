@@ -33,7 +33,9 @@ private:
 	
 public:
 	symbolTable();
+	void create();
 	int lookup(string id);
 	int insert(string name, string stype, string sscope, Value sval, int sflag);
 	int dump();
+	Symbol* getDetail(string id);
 };
