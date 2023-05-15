@@ -25,11 +25,17 @@ struct Value{
     int intVal;
     double dVal;
     string strVal;
+	int arrSize;
 };
 
 class symbolTable{
 private:
 	vector<Symbol> symbols;
+	vector<string> local;
+	vector<string> global;
+	vector<string> param_vec;
+	vector<string> func_name;
+	vector<string> proc_name;
 	
 public:
 	symbolTable();

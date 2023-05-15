@@ -35,7 +35,15 @@ int symbolTable::insert(string id, string sscope, string stype, Value sval, int 
 	detail.type = stype;
 	detail.val = sval;
 	symbols.push_back(detail);
-	return symbols.size();
+
+	if(sscope == "global" && sflag != 4) global.push_back(id);
+	else if(sflag != 4) local.push_back(id);
+	
+	if(sflag == 4) param_vec.push_back(id);		//parameters
+	if(sflag == 3) func_name.push_back(id);		//functions
+	if(sflag == 2) proc_name.push_back(id);		//procedures
+
+	return 1;
 }
 
 int symbolTable::dump(){
@@ -47,11 +55,12 @@ int symbolTable::dump(){
 	cout << setfill(' ') << fixed;
 	for(auto i : symbols){
 		cout << setw(colWidth) << i.name << setw(colWidth) << i.scope << setw(colWidth) << i.type;
-		if(typeid(i.val).name() == "d") cout << setw(colWidth) << i.val.dVal << setw(colWidth) << i.flag << "\n";
-		else if(typeid(i.val).name() == "i")cout << setw(colWidth) << i.val.intVal << setw(colWidth) << i.flag << "\n";
-		else if(typeid(i.val).name() == "NSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEE"){
-			cout << setw(colWidth) << i.val.strVal << setw(colWidth) << i.flag << "\n";
+		if(typeid(i.val).name() == typeid(i.val.dVal).name()) cout << setw(colWidth) << i.val.dVal << setw(colWidth) << i.flag << "\n";
+		else if(typeid(i.val).name() == typeid(i.val.intVal).name())cout << setw(colWidth) << i.val.intVal << setw(colWidth) << i.flag << "\n";
+		else if(typeid(i.val).name() == typeid(i.val.strVal).name()){
+			cout << setw(colWidth) << i.val.strVal;
 		}
+		cout << setw(colWidth) << i.flag << "\n";
 	}
 	return symbols.size();
 }
