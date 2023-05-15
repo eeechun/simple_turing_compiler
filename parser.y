@@ -341,6 +341,13 @@ expr:
             }
         ;
 
+invoke_expr:    expr | %empty;
+param_expr:
+            expr    { params.push_back(*$1); }
+        |   expr COMMA param_expr { params.push_back(*$1); }
+        ;
+
+bool_expr: expr {if((*$1) != "BOOL_VAL") yyerror("type error: expected to be boolean");}
 
 %%
 
