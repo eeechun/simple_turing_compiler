@@ -349,6 +349,15 @@ param_expr:
 
 bool_expr: expr {if((*$1) != "BOOL_VAL") yyerror("type error: expected to be boolean");}
 
+/*statement*/
+stmts:  stmt stmts | %empty;
+
+stmt:   simple_stmt
+    |   conditional_stmt
+    |   func_invocation
+    |   proc_invocation
+    ;
+
 %%
 
 yyerror(msg)
