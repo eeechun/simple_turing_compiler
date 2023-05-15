@@ -10,7 +10,8 @@ enum Flag{
 	procedure,
 	func,
 	param,
-	arr
+	arr,
+	bool_eq
 };
 
 struct Symbol{
