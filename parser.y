@@ -50,10 +50,10 @@ program:        identifier semi
 
 /*variable type*/
 types: 
-        intVal  { $$ = (char*)"INT_VAL"; }
-    |   strVal  { $$ = (char*)"STR_VAL";}
-    |   bVal    { $$ = (char*)"BOOL_VAL";} 
-    |   dVal    { $$ = (char*)"REAL_VAL";}
+        INT  { $$ = (char*)"INT_VAL"; }
+    |   STRING  { $$ = (char*)"STR_VAL";}
+    |   BOOL    { $$ = (char*)"BOOL_VAL";} 
+    |   REAL    { $$ = (char*)"REAL_VAL";}
     ;
 
 /*constant*/
