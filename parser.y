@@ -29,7 +29,8 @@ using namespace std;
 %token <strVal> STR_VAL
 %token <strVal> ID
 
-%type <strVal> type
+%type <strVal> types
+%type <sym_info> expr, constant_expr, func_invocation
 
 /*priority*/
 %left OR
@@ -47,13 +48,93 @@ program:        identifier semi
                 }
                 ;
 
-type: 
-        INTEGER { $$ = (char*)"INT_VAL"; }
-    |   STRING  { $$ = (char*)"STR_VAL";}
-    |   BOOLEAN { $$ = (char*)"BOOL_VAL";} 
-    |   FLOAT   { $$ = (char*)"REAL_VAL";}
+/*variable type*/
+types: 
+        intVal  { $$ = (char*)"INT_VAL"; }
+    |   strVal  { $$ = (char*)"STR_VAL";}
+    |   bVal    { $$ = (char*)"BOOL_VAL";} 
+    |   dVal    { $$ = (char*)"REAL_VAL";}
     ;
 
+/*constant*/
+const_declare:  CONST ID COLON types ASSIGN expr
+                {
+                    if($4 != id.type) yyerror("type error");
+                    if(table->lookup_local(*$2) == -1) {table->insert(*$2, "global", *$4, id.val, 0);}
+                    else {yyerror("\'" + *$2 + "\' had been defined.");}
+                }
+                |
+                CONST ID ASSIGN expr
+                {
+                    if(table->lookup_local(*$2) == -1) {table->insert(*$2, "global", *$4, id.val, 0);}
+                    else {yyerror("\'" + *$2 + "\' had been defined.");}
+                };
+
+/*variable*/
+var_declare:    VAR ID COLON types ASSIGN expr //type & expr
+                {
+                    if($4 != id.type) yyerror("type error");
+                    if(table->lookup_local(*$2) == -1) {table->insert(*$2, "global", *$4, id.val, 1);}
+                    else {yyerror("\'" + *$2 + "\' had been defined.");}
+                }
+                |
+                VAR ID ASSIGN expr  //expr
+                {
+                    if(table->lookup_local(*$2) == -1) {table->insert(*$2, "global", *$4, id.val, 1);}
+                    else {yyerror("\'" + *$2 + "\' had been defined.");}
+                }
+                |
+                VAR ID COLON types //type
+                {
+                    Value v;
+                    if(table->lookup_local(*$2) == -1) {table->insert(*$2, "global", *$4, v, 1);}
+                }
+                |
+                VAR ID COLON ARRAY expr DOT DOT expr OF types   //array
+                {
+                    Value v;
+                    v.arrSize = $6->val.intVal;
+                    if(table->lookup_local(*$2) == -1) {table->insert(*$2, "global", *$10, v, 6);}
+                };
+
+/*block*/
+block:      
+            {
+                symbolTable* tempTable = create();
+            }
+            stmt block | const_declare block | var_declare block | expr block | %empty
+            ;
+
+/*function*/
+func_declare:
+            FUNCTION ID PARENTHESES_L param_expr PARENTHESES_R COLON types
+            {
+                params.clear();
+                Value v;
+                symbolTable* funcTable = create();
+                if(table->lookup(*$2) == -1) { table->insert(*$2, *$2, *$7, v, 3);}
+                else {yyerror("\'" + *$2 + "\' function has defined.");}
+            }
+            |
+            FUNCTION ID PARENTHESES_L PARENTHESES_R COLON types
+            {
+                Value v;
+                if(table->lookup(*$2) == -1) { table->insert(*$2, *$2, *$7, v, 3);}
+                else {yyerror("\'" + *$2 + "\' function has defined.");}
+            };
+
+/*procedure*/
+proc_declare:
+            PROCEDURE ID PARENTHESES_L param_expr PARENTHESES_R
+            {
+                params.clear();
+                symbolTable* procTable = create();
+            } 
+            |
+            PROCEDURE ID PARENTHESES_L PARENTHESES_R
+            {
+                symbolTable* procTable = create();
+            };
 
 
 %%
