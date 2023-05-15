@@ -50,7 +50,7 @@ program:        identifier semi
 
 /*variable type*/
 types: 
-        INT  { $$ = (char*)"INT_VAL"; }
+        INT     { $$ = (char*)"INT_VAL"; }
     |   STRING  { $$ = (char*)"STR_VAL";}
     |   BOOL    { $$ = (char*)"BOOL_VAL";} 
     |   REAL    { $$ = (char*)"REAL_VAL";}
@@ -135,6 +135,211 @@ proc_declare:
             {
                 symbolTable* procTable = create();
             };
+
+/*expression*/
+exprs:      expr COMMA exprs
+        |   expr
+        ;
+
+expr:       
+            INT_VAL
+            { 
+                Symbol* r = new Symbol();
+                r->type = "INT_VAL"
+                r->val.intVal = $1;
+                $$ = r;
+            }
+        |   STR_VAL
+            { 
+                Symbol* r = new Symbol();
+                r->type = "STR_VAL"
+                r->val.strVal = *$1;
+                $$ = r
+            }
+        |   BOOL_VAL
+            { 
+                Symbol* r = new Symbol();
+                r->type = "BOOL_VAL"
+                r->val.bVal = $1;
+                $$ = r;
+            }
+        |   REAL_VAL
+            { 
+                Symbol* r = new Symbol();
+                r->type = "REAL_VAL"
+                r->val.dVal = $1;
+                $$ = r;
+            }
+        |   ID          
+            {
+                Symbol* r = table->getDetail(*$1);
+                if(r == nullptr) { yyerror("\'" + *$2 + "\' not declared."); }
+                else { $$ = r; }
+            }
+            |   SUB expr %prec UMINUS
+            {
+                if($2->type == "INT_VAL" || $2->type == "REAL_VAL"){
+                    Symbol* r = new Symbol();
+                    r->name = *$2;
+                    $$ = r;
+                }
+                else yyerror("type error");
+            }
+        |   expr ADD expr
+            {   
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->name = *$1;
+                r->type = $1->type;
+                $$ = r;
+            }
+        |   expr SUB expr
+            {   
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->name = *$1;
+                r->type = $1->type;
+                $$ = r;
+            }
+        |   expr MUL expr
+            {   
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->name = *$1;
+                r->type = $1->type;
+                $$ = r;
+            }
+        |   expr DIV expr
+            {   
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->name = *$1;
+                r->type = $1->type;
+                $$ = r;
+            }
+        |   expr MOD expr
+            {   
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->name = *$1;
+                r->type = $1->type;
+                $$ = r;
+            }
+        |   expr GT expr
+            {
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->flag = 6;
+                r->type = "BOOL_VAL";
+                $$ = r;
+            }
+        |   expr GE expr
+            {
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->flag = 6;
+                r->type = "BOOL_VAL";
+                $$ = r;
+            }
+        |   expr LT expr
+            {
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->flag = 6;
+                r->type = "BOOL_VAL";
+                $$ = r;
+            }
+        |   expr LE expr
+            {
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->flag = 6;
+                r->type = "BOOL_VAL";
+                $$ = r;
+            }
+        |   expr EQ expr
+            {
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->flag = 6;
+                r->type = "BOOL_VAL";
+                $$ = r;
+            }
+        |   expr NE expr
+            {
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->flag = 6;
+                r->type = "BOOL_VAL";
+                $$ = r;
+            }
+        |   expr NOT expr
+            {
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->flag = 6;
+                r->type = "BOOL_VAL";
+                $$ = r;
+            }
+        |   expr AND expr
+            {
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->flag = 6;
+                r->type = "BOOL_VAL";
+                $$ = r;
+            }
+        |   expr OR expr
+            {
+                if($1->type != $3->type) yyerror("type error: incompatible type");
+                if($1->flag == 5 || $3->flag == 5 || $1->flag == 2 || $1->flag == 2){
+                    yyerror("type error: wrong type for computing");
+                }
+                Symbol* r = new Symbol();
+                r->flag = 6;
+                r->type = "BOOL_VAL";
+                $$ = r;
+            }
+        ;
 
 
 %%
