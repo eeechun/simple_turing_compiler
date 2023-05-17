@@ -1,4 +1,4 @@
-TARGET = lex
+TARGET = yacc
 .PHONY : all clean
 all : $(TARGET)
 $(TARGET) : lex.yy.cpp y.tab.cpp symbolTable.hpp symbolTable.cpp
