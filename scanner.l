@@ -1,11 +1,11 @@
 %{
 #include "stdio.h"
+#include "string.h"
 #include "stdlib.h"
+#include "y.tab.hpp"
 #include <iostream>
-#include <vector>
-#include <algorithm>
-#include <unistd.h>
 using namespace std;
+
 #define LIST     strcat(buf,yytext)
 #define token(t) {LIST; printf("<%s>\n",#t); return(t);}
 #define tokenInteger(t,i) {LIST; printf("<%s: %s>\n",#t,i);}
@@ -49,9 +49,10 @@ char strBuf[MAX_LINE_LENG];
 "="	        	{token(EQ);}
 "not ="	        {token(NE);}
 "and"	        {token(AND);}
+"or"			{token(OR);}
 "not"	        {token(NOT);}
 "array"	        {token(ARRAY);}
-"begin"	        {token(BEGIN);}
+"begin"	        {token(BEGIN_);}
 "bool"	        {token(BOOL);}
 "char"	        {token(CHAR);}
 "const"	        {token(CONST);}
@@ -94,7 +95,7 @@ char strBuf[MAX_LINE_LENG];
 (0|([1-9][0-9]*))"."[0-9]+	{
 	tokenString(real, yytext);
 	yylval.dVal = atof(yytext);
-	return REAL_VAL
+	return REAL_VAL;
 }
 [0-9]+"."[0-9]+[Ee][+-]?[0-9]+ 	{
 	tokenString(real, yytext);
@@ -104,7 +105,7 @@ char strBuf[MAX_LINE_LENG];
 [A-Za-z]([A-Za-z]|[0-9]+)*		{
 	str_flag = 0;
 	tokenString("id",yytext);
-	yylval.strVal = new string(yytext);
+	yylval.strVal = strdup(yytext);
 	return ID;
 }
 
@@ -125,7 +126,7 @@ char strBuf[MAX_LINE_LENG];
         	flag = 0; 
         	str_flag = 1;
 			tokenString(string, strBuf);
-			yylval.strVal = new string(strBuf);
+			yylval.strVal = strdup(strBuf);
         	unput(c);
         	BEGIN INITIAL;
 			return STR_VAL;	
@@ -148,11 +149,12 @@ char strBuf[MAX_LINE_LENG];
 	}
 	if(strBuf[0] != '\0'){
 		tokenString(id, yytext);
-		yylval.strVal = new string(strBuf);
-		return ID;
+		yylval.strVal = strdup(strBuf);
 	}
 	unput('\n');
 	BEGIN INITIAL;
+	
+	return ID;
 }
 
 "%"([^"\n])*    {
