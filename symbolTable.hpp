@@ -4,45 +4,29 @@
 #include <iomanip>
 using namespace std;
 
-enum Flag{
-	constant,
-	variable,
-	procedure,
-	func,
-	param,
-	arr,
-	bool_eq
-};
-
 struct Symbol{
 	string name;
-	string type;
+	char* valueType;
 	string scope;
-	Value val;
-	int flag;
+	string flag;
 };
 
-struct Value{
+/*struct Value{
     int intVal;
     double dVal;
     string strVal;
-	int arrSize;
-};
+};*/
 
 class symbolTable{
 private:
 	vector<Symbol> symbols;
-	vector<string> local;
-	vector<string> global;
-	vector<string> param_vec;
-	vector<string> func_name;
-	vector<string> proc_name;
-	
+	vector<Symbol> dumpTable;
+
 public:
 	symbolTable();
 	void create();
-	int lookup(string id);
-	int insert(string name, string stype, string sscope, Value sval, int sflag);
-	int dump();
-	Symbol* getDetail(string id);
+	int lookup(string sscope, string id);
+	int insert(string name, string sscope, char* stype, string sflag);
+	void dump(string sscope);
+	Symbol* getDetail(string sscope, string id);
 };

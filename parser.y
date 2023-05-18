@@ -9,6 +9,10 @@
 using namespace std;
 #define Trace(t)        printf(t)
 
+symbolTable* table = new symbolTable();
+string scopeTemp = "global";
+string returnType = "void";
+
 void yyerror(string s);
 
 %}
@@ -26,21 +30,21 @@ void yyerror(string s);
 %token ARRAY BEGIN_ BOOL CHAR CONST DECREASING DEFAULT DO ELSE END EXIT FOR FUNCTION GET 
 %token IF INT LOOP OF PUT PROCEDURE REAL RESULT RETURN SKIP STRING THEN VAR WHEN
 
-%token INT_VAL
-%token REAL_VAL
-%token BOOL_VAL
-%token STR_VAL
-%token ID
+%token <intVal>     INT_VAL
+%token <dVal>       REAL_VAL
+%token <boolVal>    BOOL_VAL
+%token <strVal>     STR_VAL
+%token <strVal>     ID
 
-//%type <strVal> types constant_expr expr invocation  
+%type <strVal> types array_declare func_declare expr invocation
 
 /*priority*/
-//%left OR
-//%left AND
-//%left NOT
-//%left LT LE GT GE EQ NE
-//%left ADD SUB
-//%left MUL DIV MOD
+%left OR
+%left AND
+%left NOT
+%left LT LE GT GE EQ NE
+%left ADD SUB
+%left MUL DIV MOD
 %nonassoc UMINUS
 
 %start program
@@ -50,35 +54,87 @@ program:    opts | stmts | opts stmts | %empty;
 
 /*variable type*/
 types: 
-        INT     
-    |   STRING  
-    |   BOOL    
-    |   REAL    
+        INT     { $$ = (char*)"integer"; }
+    |   STRING  { $$ = (char*)"str"; }
+    |   BOOL    { $$ = (char*)"boolean"; }
+    |   REAL    { $$ = (char*)"real"; }
+    ;
     
 /*constant*/
-const_declare:  CONST ID COLON types ASSIGN constant_expr
+const_declare:  CONST ID COLON types ASSIGN expr
+                {
+                    if(string($4) != string($6)) yyerror("type error: not compatible");
+                    if(table->lookup(scopeTemp, string($2)) == -1){
+                        table->insert(string($2), scopeTemp, (char*)($4), "constant");
+                    }
+                    else yyerror("Constant had declared.");
+                }
                 |
-                CONST ID ASSIGN constant_expr
+                CONST ID ASSIGN expr
+                {
+                    if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($4), "constant");
+                    else yyerror("Constant had declared.");
+                }
                 ;
 /*variable*/
-var_declare:    VAR ID COLON types ASSIGN constant_expr //type & expr
+var_declare:    VAR ID COLON types ASSIGN expr //type & expr
+                {
+                    if(string($4) != string($6)) yyerror("type error: not compatible");
+                    if(table->lookup(scopeTemp, string($2)) == -1){
+                        table->insert(string($2), scopeTemp, (char*)($4), "variable");
+                    }
+                    else yyerror("variable had declared.");
+                }
                 |
-                VAR ID ASSIGN constant_expr  //expr
+                VAR ID ASSIGN expr  //expr
+                {
+                    if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($4), "variable");
+                    else yyerror("variable had declared.");
+                }
                 |
                 VAR ID COLON types //type
-                |
-                VAR ID COLON ARRAY constant_expr DOT DOT constant_expr OF types   //array
-                ;
+                {
+                    if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($4), "variable");
+                    else yyerror("variable had declared.");
+                };
+
+/*array*/
+array_declare:
+                VAR ID COLON ARRAY expr DOT DOT expr OF types
+                {
+                    if(string($5) != string($8)) yyerror("type error: type incompatable");
+                    if(string($5) != "integer" || string($8) != "integer") yyerror("type error: array size must be integer");
+                    if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($10), "array");
+                    else yyerror("array had declared.");
+                    $$ = (char*)($10);
+                };
 
 /*blocks*/
-block:      BEGIN_ opt_empty END;
+block:      BEGIN_
+            {
+                scopeTemp = "block";
+            }
+            opt_empty END
+            {
+                table->dump(scopeTemp);
+                scopeTemp = "global";
+            };
 
 /*function*/
-func_declare:   
-            FUNCTION ID PARENTHESES_L params PARENTHESES_R COLON types opt_empty END ID
-            |
-            FUNCTION ID PARENTHESES_L PARENTHESES_R COLON types opt_empty END ID
-            ;
+func_declare:
+            FUNCTION ID 
+            {
+                scopeTemp = string($2);
+            }    
+            PARENTHESES_L params PARENTHESES_R COLON types opt_empty END ID
+            {
+                if(table->lookup("global", string($2)) == -1) table->insert(string($2), "global", (char*)($8) , "function");
+                else yyerror("ERROR: redefinition");
+                cout<<"function type: "<<returnType<<"\n";
+                if(returnType != string($8)) yyerror("type error: function return in the wrong type");
+                table->dump(scopeTemp);
+                returnType = "void";
+            };
 
 opt_block: opt | stmt;
 opt_blocks:  opt_block | opt_block opt_blocks;
@@ -86,69 +142,154 @@ opt_empty:  %empty | opt_blocks;
 
 /*procedure*/
 proc_declare:
-            PROCEDURE ID PARENTHESES_L params PARENTHESES_R opt_empty END ID
-            |
-            PROCEDURE ID PARENTHESES_L PARENTHESES_R opt_empty END ID
-            ;
+            PROCEDURE ID
+            {
+                scopeTemp = string($2);
+                if(table->lookup("global", string($2)) == -1) table->insert(string($2), "global", (char*)"void", "procedure");
+                else yyerror("ERROR: redefinition");
+            }
+            PARENTHESES_L params PARENTHESES_R opt_empty END ID
+            {
+                cout<<"procedure type: "<<returnType<<"\n";
+                if(returnType != "void") yyerror("type error: no return in procedure");
+                table->dump(scopeTemp);
+            };
 
 
 params:  param | param COMMA params;
 
-param:  ID COLON types;
+param:  ID COLON types
+        {
+            if(table->lookup(scopeTemp, string($1)) == -1) table->insert(string($1), scopeTemp, (char*)($3), "parameter");
+            else yyerror("parameter had declared.");
+        }
+        |%empty
+        ;
 
 
 /*expression*/
 exprs:      expr | expr COMMA exprs;
 expr:       
-            constant_expr
+            INT_VAL     { $$ = (char*)"integer"; }
+        |   STR_VAL     { $$ = (char*)"str"; }
+        |   BOOL_VAL    { $$ = (char*)"boolean"; }
+        |   REAL_VAL    { $$ = (char*)"real"; }
 
-        |   ID
+        |   ID 
+            {
+                Symbol* detail = table->getDetail(scopeTemp, string($1));
+                if(detail == nullptr) yyerror("ID not found");
+                
+                $$ = (char*)detail->valueType;
+            }
 
-        |   invocation       
+        |   array_declare   { $$ = (char*)($1); }
+
+        |   invocation      { $$ = (char*)($1); }
 
         |   SUB expr %prec UMINUS
+            {
+                if (string($2) == "integer" || string($2) == "real" || string($2)== "str") $$ = (char*)($2);
+                else yyerror("UMINUS type error");
+            }
 
         |   expr ADD expr
+            {
+                if(string($1) != string($3)) yyerror("type error: ADD type incompatable");
+                $$ = (char*)($1);
+            }
 
         |   expr SUB expr
+            {
+                if(string($1) != string($3)) yyerror("type error: SUB type incompatable");
+                $$ = (char*)($1);
+            }
 
         |   expr MUL expr
+            {
+                if(string($1) != string($3)) yyerror("type error: MUL type incompatable");
+                $$ = (char*)($1);
+            }
 
         |   expr DIV expr
+            {
+                if(string($1) != string($3)) yyerror("type error: DIV type incompatable");
+                $$ = (char*)($1);
+            }
 
         |   expr MOD expr
+            {
+                if(string($1) != string($3)) yyerror("type error: MOD type incompatable");
+                $$ = (char*)($1);
+            }
 
         |   expr GT expr
+            {
+                if(string($1) != string($3)) yyerror("type error: GT type incompatable");
+                $$ = (char*)"boolean";
+            }
 
         |   expr GE expr
+            {
+                if(string($1) != string($3)) yyerror("type error: GE type incompatable");
+                $$ = (char*)"boolean";
+            }
 
         |   expr LT expr
+            {
+                if(string($1) != string($3)) yyerror("type error: LT type incompatable");
+                $$ = (char*)"boolean";
+            }
 
         |   expr LE expr
+            {
+                if(string($1) != string($3)) yyerror("type error: LE type incompatable");
+                $$ = (char*)"boolean";
+            }
 
         |   expr EQ expr
+            {
+                if(string($1) != string($3)) yyerror("type error: EQ type incompatable");
+                $$ = (char*)"boolean";
+            }
 
         |   expr NE expr
-
-        |   expr NOT expr
+            {
+                if(string($1) != string($3)) yyerror("type error: NE type incompatable");
+                $$ = (char*)"boolean";
+            }
 
         |   expr AND expr
+            {
+                if(string($1) != string($3)) yyerror("type error: AND type incompatable");
+                $$ = (char*)"boolean";
+            }
 
         |   expr OR expr
+            {
+                if(string($1) != string($3)) yyerror("type error: OR type incompatable");
+                $$ = (char*)"boolean";
+            }
+
+        |   NOT expr
+            {
+                if(string($2) != "boolean") yyerror("type error: NOT expression only allows boolean type");
+                $$ = (char*)"boolean";
+            }
       ;
 
 bool_expr: PARENTHESES_L exprs PARENTHESES_R | exprs;
 
-constant_expr: 
-        INT_VAL     
-    |   STR_VAL     
-    |   BOOL_VAL     
-    |   REAL_VAL    
+/*constant_expr: 
+        INT_VAL     { $$ = (char*)"integer"; }
+    |   STR_VAL     { $$ = (char*)"str"; }
+    |   BOOL_VAL    { $$ = (char*)"boolean"; }
+    |   REAL_VAL    { $$ = (char*)"real"; }
     ;
-
+*/
 
 /*statement*/
-opt:    const_declare | var_declare | func_declare | proc_declare | block;
+opt:    const_declare | var_declare | func_declare | proc_declare | array_declare | block;
 opts:    opt | opt opts;
 
 stmts:  stmt | stmt stmts;
@@ -169,8 +310,14 @@ simple_stmt:
         GET ID
         |
         RESULT expr
+        {
+            returnType = string($2);
+        }
         |
         RETURN
+        {
+            returnType = "void";
+        }
         |
         EXIT WHEN bool_expr
         |
@@ -190,7 +337,12 @@ for_loop:
             ;
 
 invocation:
-            ID PARENTHESES_L arguments_empty PARENTHESES_R;
+            ID PARENTHESES_L arguments_empty PARENTHESES_R
+            {
+                Symbol* detail = table->getDetail(scopeTemp, string($1));
+                if(detail == nullptr) yyerror("target not found");
+                $$ = (char*)detail->valueType;
+            };
 
 arguments:  expr | expr COMMA arguments;
 arguments_empty: %empty | arguments;
@@ -214,6 +366,7 @@ int main(int argc, char* argv[])
     /* perform parsing */
     if (yyparse() == 1)                 /* parsing */
         yyerror("Parsing error !");     /* syntax error */
-        
+    
+    table->dump("global");
     return 0;
 }
