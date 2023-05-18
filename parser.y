@@ -12,8 +12,36 @@ using namespace std;
 symbolTable* table = new symbolTable();
 string scopeTemp = "global";
 string returnType = "void";
+string func_name = "";
 
 void yyerror(string s);
+
+vector<Symbol> argument_vector;
+vector<Symbol> parameter_vector;
+
+int countPara(string sscope){
+    int cnt = count_if(parameter_vector.begin(), parameter_vector.end(), [sscope](const Symbol& s) { return s.scope == sscope; });
+    return cnt;
+}
+int countArgu(string sscope){
+    int cnt = count_if(argument_vector.begin(), argument_vector.end(), [sscope](const Symbol& s) { return s.scope == sscope; });
+    return cnt;
+}
+
+void show(){
+    cout<<"=====================================================\n";
+    for(auto i: parameter_vector){
+        
+        cout << i.name<<" "<<i.scope<<" "<<i.valueType<<" "<<i.flag<<"\n";
+            
+    }
+    for(auto i: argument_vector){
+        
+        cout << i.name<<" "<<i.scope<<" "<<i.valueType<<" "<<i.flag<<"\n";
+            
+    }
+    cout<<"=====================================================\n";
+}
 
 %}
 
@@ -130,8 +158,8 @@ func_declare:
             {
                 if(table->lookup("global", string($2)) == -1) table->insert(string($2), "global", (char*)($8) , "function");
                 else yyerror("ERROR: redefinition");
-                cout<<"function type: "<<returnType<<"\n";
                 if(returnType != string($8)) yyerror("type error: function return in the wrong type");
+
                 table->dump(scopeTemp);
                 returnType = "void";
             };
@@ -150,7 +178,6 @@ proc_declare:
             }
             PARENTHESES_L params PARENTHESES_R opt_empty END ID
             {
-                cout<<"procedure type: "<<returnType<<"\n";
                 if(returnType != "void") yyerror("type error: no return in procedure");
                 table->dump(scopeTemp);
             };
@@ -160,7 +187,17 @@ params:  param | param COMMA params;
 
 param:  ID COLON types
         {
-            if(table->lookup(scopeTemp, string($1)) == -1) table->insert(string($1), scopeTemp, (char*)($3), "parameter");
+            Symbol detail;
+            if(table->lookup(scopeTemp, string($1)) == -1){
+                table->insert(string($1), scopeTemp, (char*)($3), "parameter");
+
+                detail.name = string($1);
+                detail.scope = scopeTemp;
+                detail.valueType = (char*)($3);
+                detail.flag = "parameter";
+                parameter_vector.push_back(detail);
+                
+            }
             else yyerror("parameter had declared.");
         }
         |%empty
@@ -337,14 +374,47 @@ for_loop:
             ;
 
 invocation:
-            ID PARENTHESES_L arguments_empty PARENTHESES_R
+            ID
             {
-                Symbol* detail = table->getDetail(scopeTemp, string($1));
+                argument_vector.clear();
+                func_name = string($1);
+                scopeTemp = func_name;
+            }
+            PARENTHESES_L arguments_empty PARENTHESES_R
+            {
+                Symbol* detail = table->getDetail("global", string($1));
                 if(detail == nullptr) yyerror("target not found");
+
+                if(countPara(scopeTemp) != countArgu(scopeTemp)) yyerror("arguments and parameters not match");
+                for(auto i: parameter_vector){
+                    for(auto j: argument_vector){
+                        if(i.scope != j.scope) continue;
+                        if(i.valueType != j.valueType) yyerror("type error: arguments and parameters not match");
+                    }
+                }
+                
                 $$ = (char*)detail->valueType;
             };
 
-arguments:  expr | expr COMMA arguments;
+arguments:  expr 
+            {
+                Symbol detail;
+                detail.name = "";
+                detail.scope = func_name;
+                detail.valueType = (char*)($1);
+                detail.flag = "argu";
+                argument_vector.push_back(detail);
+            }
+            |
+            expr COMMA arguments 
+            {
+                Symbol detail;
+                detail.name = "";
+                detail.scope = func_name;
+                detail.valueType = (char*)($1);
+                detail.flag = "argu";
+                argument_vector.push_back(detail);
+            };
 arguments_empty: %empty | arguments;
 
 %%
