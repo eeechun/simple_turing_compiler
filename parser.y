@@ -64,7 +64,7 @@ void show(){
 %token <strVal>     STR_VAL
 %token <strVal>     ID
 
-%type <strVal> types array_declare func_declare expr invocation
+%type <strVal> types array_declare array_ref func_declare expr invocation
 
 /*priority*/
 %left OR
@@ -137,6 +137,12 @@ array_declare:
                     $$ = (char*)($10);
                 };
 
+array_ref:  ID SQUARE_BRACKETS_L expr SQUARE_BRACKETS_R 
+            {
+                Symbol* id_d = table->getDetail(scopeTemp, string($1));
+                $$ = (char*)id_d->valueType;
+            }
+
 /*blocks*/
 block:      BEGIN_
             {
@@ -144,6 +150,7 @@ block:      BEGIN_
             }
             opt_empty END
             {
+                scopeTemp = "block";
                 table->dump(scopeTemp);
                 scopeTemp = "global";
             };
@@ -159,7 +166,7 @@ func_declare:
                 if(table->lookup("global", string($2)) == -1) table->insert(string($2), "global", (char*)($8) , "function");
                 else yyerror("ERROR: redefinition");
                 if(returnType != string($8)) yyerror("type error: function return in the wrong type");
-
+                scopeTemp = string($2);
                 table->dump(scopeTemp);
                 returnType = "void";
             };
@@ -173,12 +180,14 @@ proc_declare:
             PROCEDURE ID
             {
                 scopeTemp = string($2);
+                cout<<"start procedure\n";
                 if(table->lookup("global", string($2)) == -1) table->insert(string($2), "global", (char*)"void", "procedure");
                 else yyerror("ERROR: redefinition");
             }
             PARENTHESES_L params PARENTHESES_R opt_empty END ID
             {
                 if(returnType != "void") yyerror("type error: no return in procedure");
+                scopeTemp = string($2);
                 table->dump(scopeTemp);
             };
 
@@ -187,15 +196,15 @@ params:  param | param COMMA params;
 
 param:  ID COLON types
         {
-            Symbol detail;
+            Symbol p;
             if(table->lookup(scopeTemp, string($1)) == -1){
                 table->insert(string($1), scopeTemp, (char*)($3), "parameter");
 
-                detail.name = string($1);
-                detail.scope = scopeTemp;
-                detail.valueType = (char*)($3);
-                detail.flag = "parameter";
-                parameter_vector.push_back(detail);
+                p.name = string($1);
+                p.scope = scopeTemp;
+                p.valueType = (char*)($3);
+                p.flag = "parameter";
+                parameter_vector.push_back(p);
                 
             }
             else yyerror("parameter had declared.");
@@ -205,7 +214,25 @@ param:  ID COLON types
 
 
 /*expression*/
-exprs:      expr | expr COMMA exprs;
+exprs:      expr
+            {
+                Symbol argu;
+                argu.name = "";
+                argu.scope = func_name;
+                argu.valueType = (char*)($1);
+                argu.flag = "argu";
+                argument_vector.push_back(argu);
+            }
+        |   expr COMMA exprs
+            {
+                Symbol argu;
+                argu.name = "";
+                argu.scope = func_name;
+                argu.valueType = (char*)($1);
+                argu.flag = "argu";
+                argument_vector.push_back(argu);
+            };
+
 expr:       
             INT_VAL     { $$ = (char*)"integer"; }
         |   STR_VAL     { $$ = (char*)"str"; }
@@ -214,13 +241,14 @@ expr:
 
         |   ID 
             {
-                Symbol* detail = table->getDetail(scopeTemp, string($1));
-                if(detail == nullptr) yyerror("ID not found");
-                
-                $$ = (char*)detail->valueType;
+                Symbol* id_d = table->getDetail(scopeTemp, string($1));
+                if(id_d == nullptr) yyerror("ID not found");
+                $$ = (char*)id_d->valueType;
             }
 
         |   array_declare   { $$ = (char*)($1); }
+
+        |   array_ref       { $$ = (char*)($1); }
 
         |   invocation      { $$ = (char*)($1); }
 
@@ -232,31 +260,35 @@ expr:
 
         |   expr ADD expr
             {
-                if(string($1) != string($3)) yyerror("type error: ADD type incompatable");
+                if(string($1) == "string" || string($3) == "string") yyerror("type error: ADD type incompatable");
+                if(string($1) == "real" || string($3) == "real") $$ = (char*)"real";
                 $$ = (char*)($1);
             }
 
         |   expr SUB expr
             {
-                if(string($1) != string($3)) yyerror("type error: SUB type incompatable");
+                if(string($1) == "string" || string($3) == "string") yyerror("type error: SUB type incompatable");
+                if(string($1) == "real" || string($3) == "real") $$ = (char*)"real";
                 $$ = (char*)($1);
             }
 
         |   expr MUL expr
             {
-                if(string($1) != string($3)) yyerror("type error: MUL type incompatable");
+                if(string($1) == "string" || string($3) == "string") yyerror("type error: MUL type incompatable");
+                if(string($1) == "real" || string($3) == "real") $$ = (char*)"real";
                 $$ = (char*)($1);
             }
 
         |   expr DIV expr
             {
-                if(string($1) != string($3)) yyerror("type error: DIV type incompatable");
+                if(string($1) == "string" || string($3) == "string") yyerror("type error: DIV type incompatable");
+                if(string($1) == "real" || string($3) == "real") $$ = (char*)"real";
                 $$ = (char*)($1);
             }
 
         |   expr MOD expr
             {
-                if(string($1) != string($3)) yyerror("type error: MOD type incompatable");
+                if(string($1) == "string" || string($3) == "string") yyerror("type error: MOD type incompatable");
                 $$ = (char*)($1);
             }
 
@@ -313,17 +345,18 @@ expr:
                 if(string($2) != "boolean") yyerror("type error: NOT expression only allows boolean type");
                 $$ = (char*)"boolean";
             }
+
+        |   PARENTHESES_L expr PARENTHESES_R
+            {
+                $$ = (char*)($2);
+            }
       ;
 
-bool_expr: PARENTHESES_L exprs PARENTHESES_R | exprs;
-
-/*constant_expr: 
-        INT_VAL     { $$ = (char*)"integer"; }
-    |   STR_VAL     { $$ = (char*)"str"; }
-    |   BOOL_VAL    { $$ = (char*)"boolean"; }
-    |   REAL_VAL    { $$ = (char*)"real"; }
-    ;
-*/
+bool_expr:  
+            expr 
+            {  
+                if(string($1) != "boolean") yyerror("type error: not boolean");
+            };
 
 /*statement*/
 opt:    const_declare | var_declare | func_declare | proc_declare | array_declare | block;
@@ -341,6 +374,15 @@ stmt:
     
 simple_stmt:
         ID ASSIGN expr
+        {
+            Symbol* id_d = table->getDetail(scopeTemp, string($1));
+            if(id_d->valueType != string($3)) printf("!!! warning: type implicit conversion !!!\n");
+        }
+        |
+        array_ref ASSIGN expr
+        {
+            if(string($1) != string($3)) yyerror("type error: array assign denied");
+        }
         |
         PUT expr
         |
@@ -358,33 +400,58 @@ simple_stmt:
         |
         EXIT WHEN bool_expr
         |
+        EXIT
+        |
         SKIP
         ;
 
-conditional_stmt:   IF bool_expr THEN opt_empty else_stmt END IF;
+conditional_stmt:   IF
+                    {
+                        scopeTemp = "condition";
+                    }
+                    bool_expr THEN opt_empty else_stmt END IF
+                    {
+                        scopeTemp = "condition";
+                        table->dump(scopeTemp);
+                    };
 
 else_stmt: ELSE opt_blocks | %empty;
 
-loop:   LOOP opt_empty END LOOP;
+loop:   LOOP
+        {
+            scopeTemp = "loop";
+        }
+        opt_empty END LOOP
+        {
+            scopeTemp = "loop";
+            table->dump(scopeTemp);
+        };
 
 for_loop:
-            FOR ID COLON expr DOT DOT expr opt_empty END FOR
+            FOR
+            {
+                scopeTemp = "for_loop";
+            }
+            ID COLON expr DOT DOT expr opt_empty END FOR
+            {
+                scopeTemp = "for_loop";
+                table->dump(scopeTemp);
+            }
             |
-            FOR DECREASING ID COLON expr DOT DOT expr opt_empty END FOR
+            FOR
+            {
+                scopeTemp = "decreasing_loop";
+            }
+            DECREASING ID COLON expr DOT DOT expr opt_empty END FOR
+            {
+                scopeTemp = "decreasing_loop";
+                table->dump(scopeTemp);
+            }
             ;
 
 invocation:
-            ID
-            {
-                argument_vector.clear();
-                func_name = string($1);
-                scopeTemp = func_name;
-            }
             PARENTHESES_L arguments_empty PARENTHESES_R
-            {
-                Symbol* detail = table->getDetail("global", string($1));
-                if(detail == nullptr) yyerror("target not found");
-
+            /*{
                 if(countPara(scopeTemp) != countArgu(scopeTemp)) yyerror("arguments and parameters not match");
                 for(auto i: parameter_vector){
                     for(auto j: argument_vector){
@@ -394,28 +461,10 @@ invocation:
                 }
                 
                 $$ = (char*)detail->valueType;
-            };
+            }*/;
 
-arguments:  expr 
-            {
-                Symbol detail;
-                detail.name = "";
-                detail.scope = func_name;
-                detail.valueType = (char*)($1);
-                detail.flag = "argu";
-                argument_vector.push_back(detail);
-            }
-            |
-            expr COMMA arguments 
-            {
-                Symbol detail;
-                detail.name = "";
-                detail.scope = func_name;
-                detail.valueType = (char*)($1);
-                detail.flag = "argu";
-                argument_vector.push_back(detail);
-            };
-arguments_empty: %empty | arguments;
+
+arguments_empty: %empty | exprs;
 
 %%
 
