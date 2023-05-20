@@ -45,7 +45,12 @@ Symbol* symbolTable::getDetail(string sscope, string id){
 		return &symbols.at(distance(symbols.begin(), it));
 	}
 }
-	
+
+void symbolTable::removeItem(string sscope){
+	vector<Symbol>::iterator it = remove_if(symbols.begin(), symbols.end(), [sscope](const Symbol& s) { return s.scope == sscope; });
+	symbols.erase(it,symbols.end());
+}
+
 void symbolTable::dump(string sscope){
 	cout << sscope << " symbol table:\n";
 	
@@ -66,4 +71,6 @@ void symbolTable::dump(string sscope){
 
 	dumpTable.clear();
 	cout << "----------------------------------------------------------------------------------\n";
+
+	if(sscope != "global") removeItem(sscope);
 }
