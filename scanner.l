@@ -178,12 +178,12 @@ char strBuf[MAX_LINE_LENG];
 }
 
 
-\n      {
-	str_flag = 1 ;
+\n  {
+		str_flag = 1 ;
         LIST;
         printf("%d: %s", linenum++, buf);
         buf[0] = '\0';
-        }
+    }
 
 [ \t]*	{LIST;}
 
