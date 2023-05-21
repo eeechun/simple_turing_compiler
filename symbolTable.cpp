@@ -24,13 +24,13 @@ int symbolTable::lookup(string sscope, string id){
 	if(it == symbols.end()) return -1;
 	else{
 		if(symbols.at(distance(symbols.begin(), it)).scope == sscope){
-			return 1;
+			return distance(symbols.begin(), it);
 		}
 		else return -1;
 	}
 }
 
-Symbol* symbolTable::getDetail(string sscope, string id){
+Symbol* symbolTable::getItem(string sscope, string id){
 	vector<Symbol>::iterator it = find_if(symbols.begin(), symbols.end(), [id](const Symbol& s) { return s.name == id; });
 	if(it == symbols.end()) return nullptr;
 	if (symbols.at(distance(symbols.begin(), it)).scope != sscope)

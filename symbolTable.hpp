@@ -23,5 +23,5 @@ public:
 	int insert(string name, string sscope, char* stype, string sflag);
 	void removeItem(string sscope);
 	void dump(string sscope);
-	Symbol* getDetail(string sscope, string id);
+	Symbol* getItem(string sscope, string id);
 };
