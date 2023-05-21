@@ -13,6 +13,7 @@ symbolTable* table = new symbolTable();
 string scopeTemp = "global";
 string returnType = "void";
 string func_name = "";
+bool argumentFlag = false;
 
 void yyerror(string s);
 
@@ -31,12 +32,13 @@ int countArgu(string sscope){
 void show(){
     cout<<"=====================================================\n";
     for(auto i: parameter_vector){
-        
-        cout << i.name<<" "<<i.scope<<" "<<i.valueType<<" "<<i.flag<<"\n";
-            
+
+        cout<< "parameters:\n";
+        cout << i.name<<" "<<i.scope<<" "<<i.valueType<<" "<<i.flag<<"\n";  
     }
     for(auto i: argument_vector){
         
+        cout<< "arguments:\n";
         cout << i.name<<" "<<i.scope<<" "<<i.valueType<<" "<<i.flag<<"\n";
             
     }
@@ -139,7 +141,7 @@ array_declare:
 
 array_ref:  ID SQUARE_BRACKETS_L expr SQUARE_BRACKETS_R 
             {
-                Symbol* id_d = table->getDetail(scopeTemp, string($1));
+                Symbol* id_d = table->getItem(scopeTemp, string($1));
                 $$ = (char*)id_d->valueType;
             }
 
@@ -168,7 +170,7 @@ func_declare:
                 if(returnType != string($8)) yyerror("type error: function return in the wrong type");
                 scopeTemp = string($2);
                 table->dump(scopeTemp);
-                returnType = "void";
+                //returnType = "void";
             };
 
 opt_block: opt | stmt;
@@ -216,20 +218,22 @@ param:  ID COLON types
 /*expression*/
 exprs:      expr
             {
+                func_name = scopeTemp;
                 Symbol argu;
                 argu.name = "";
                 argu.scope = func_name;
                 argu.valueType = (char*)($1);
-                argu.flag = "argu";
+                argu.flag = "argument";
                 argument_vector.push_back(argu);
             }
         |   expr COMMA exprs
             {
+                func_name = scopeTemp;
                 Symbol argu;
                 argu.name = "";
                 argu.scope = func_name;
                 argu.valueType = (char*)($1);
-                argu.flag = "argu";
+                argu.flag = "argument";
                 argument_vector.push_back(argu);
             };
 
@@ -241,8 +245,9 @@ expr:
 
         |   ID 
             {
-                Symbol* id_d = table->getDetail(scopeTemp, string($1));
+                Symbol* id_d = table->getItem(scopeTemp, string($1));
                 if(id_d == nullptr) yyerror("ID not found");
+                if(id_d->flag == "function" || id_d->flag == "procedure") argumentFlag = true;
                 $$ = (char*)id_d->valueType;
             }
 
@@ -254,95 +259,95 @@ expr:
 
         |   SUB expr %prec UMINUS
             {
-                if (string($2) == "integer" || string($2) == "real" || string($2)== "str") $$ = (char*)($2);
+                if ((char*)($2) == "integer" || (char*)($2) == "real" || (char*)($2)== "str") $$ = (char*)($2);
                 else yyerror("UMINUS type error");
             }
 
         |   expr ADD expr
             {
-                if(string($1) == "string" || string($3) == "string") yyerror("type error: ADD type incompatable");
-                if(string($1) == "real" || string($3) == "real") $$ = (char*)"real";
+                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: ADD type incompatable");
+                if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
                 $$ = (char*)($1);
             }
 
         |   expr SUB expr
             {
-                if(string($1) == "string" || string($3) == "string") yyerror("type error: SUB type incompatable");
-                if(string($1) == "real" || string($3) == "real") $$ = (char*)"real";
+                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: SUB type incompatable");
+                if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
                 $$ = (char*)($1);
             }
 
         |   expr MUL expr
             {
-                if(string($1) == "string" || string($3) == "string") yyerror("type error: MUL type incompatable");
-                if(string($1) == "real" || string($3) == "real") $$ = (char*)"real";
+                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: MUL type incompatable");
+                if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
                 $$ = (char*)($1);
             }
 
         |   expr DIV expr
             {
-                if(string($1) == "string" || string($3) == "string") yyerror("type error: DIV type incompatable");
-                if(string($1) == "real" || string($3) == "real") $$ = (char*)"real";
+                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: DIV type incompatable");
+                if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
                 $$ = (char*)($1);
             }
 
         |   expr MOD expr
             {
-                if(string($1) == "string" || string($3) == "string") yyerror("type error: MOD type incompatable");
+                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: MOD type incompatable");
                 $$ = (char*)($1);
             }
 
         |   expr GT expr
             {
-                if(string($1) != string($3)) yyerror("type error: GT type incompatable");
+                if((char*)($1) != (char*)($3)) yyerror("type error: GT type incompatable");
                 $$ = (char*)"boolean";
             }
 
         |   expr GE expr
             {
-                if(string($1) != string($3)) yyerror("type error: GE type incompatable");
+                if((char*)($1) != (char*)($3)) yyerror("type error: GE type incompatable");
                 $$ = (char*)"boolean";
             }
 
         |   expr LT expr
             {
-                if(string($1) != string($3)) yyerror("type error: LT type incompatable");
+                if((char*)($1) != (char*)($3)) yyerror("type error: LT type incompatable");
                 $$ = (char*)"boolean";
             }
 
         |   expr LE expr
             {
-                if(string($1) != string($3)) yyerror("type error: LE type incompatable");
+                if((char*)($1) != (char*)($3)) yyerror("type error: LE type incompatable");
                 $$ = (char*)"boolean";
             }
 
         |   expr EQ expr
             {
-                if(string($1) != string($3)) yyerror("type error: EQ type incompatable");
+                if((char*)($1) != (char*)($3)) yyerror("type error: EQ type incompatable");
                 $$ = (char*)"boolean";
             }
 
         |   expr NE expr
             {
-                if(string($1) != string($3)) yyerror("type error: NE type incompatable");
+                if((char*)($1) != (char*)($3)) yyerror("type error: NE type incompatable");
                 $$ = (char*)"boolean";
             }
 
         |   expr AND expr
             {
-                if(string($1) != string($3)) yyerror("type error: AND type incompatable");
+                if((char*)($1) != (char*)($3)) yyerror("type error: AND type incompatable");
                 $$ = (char*)"boolean";
             }
 
         |   expr OR expr
             {
-                if(string($1) != string($3)) yyerror("type error: OR type incompatable");
+                if((char*)($1) != (char*)($3)) yyerror("type error: OR type incompatable");
                 $$ = (char*)"boolean";
             }
 
         |   NOT expr
             {
-                if(string($2) != "boolean") yyerror("type error: NOT expression only allows boolean type");
+                if((char*)($2) != "boolean") yyerror("type error: NOT expression only allows boolean type");
                 $$ = (char*)"boolean";
             }
 
@@ -350,12 +355,12 @@ expr:
             {
                 $$ = (char*)($2);
             }
-      ;
+        ;
 
 bool_expr:  
             expr 
             {  
-                if(string($1) != "boolean") yyerror("type error: not boolean");
+                if((char*)($1) != "boolean") yyerror("type error: not boolean");
             };
 
 /*statement*/
@@ -375,13 +380,13 @@ stmt:
 simple_stmt:
         ID ASSIGN expr
         {
-            Symbol* id_d = table->getDetail(scopeTemp, string($1));
-            if(id_d->valueType != string($3)) printf("!!! warning: type implicit conversion !!!\n");
+            Symbol* id_d = table->getItem(scopeTemp, string($1));
+            if(id_d->valueType != (char*)($3)) printf("!!! warning: type implicit conversion !!!\n");
         }
         |
         array_ref ASSIGN expr
         {
-            if(string($1) != string($3)) yyerror("type error: array assign denied");
+            if((char*)($1) != (char*)($3)) yyerror("type error: array assign denied");
         }
         |
         PUT expr
@@ -450,8 +455,8 @@ for_loop:
             ;
 
 invocation:
-            PARENTHESES_L arguments_empty PARENTHESES_R
-            /*{
+            ID PARENTHESES_L arguments_empty PARENTHESES_R
+            {
                 if(countPara(scopeTemp) != countArgu(scopeTemp)) yyerror("arguments and parameters not match");
                 for(auto i: parameter_vector){
                     for(auto j: argument_vector){
@@ -460,8 +465,10 @@ invocation:
                     }
                 }
                 
-                $$ = (char*)detail->valueType;
-            }*/;
+                Symbol* temp = table->getItem("global", scopeTemp);
+                if(temp == nullptr) yyerror("invoke failed: not found");
+                $$ = (char*)(temp->valueType);
+            };
 
 
 arguments_empty: %empty | exprs;
