@@ -170,7 +170,6 @@ func_declare:
                 if(returnType != string($8)) yyerror("type error: function return in the wrong type");
                 scopeTemp = string($2);
                 table->dump(scopeTemp);
-                //returnType = "void";
             };
 
 opt_block: opt | stmt;
@@ -265,36 +264,36 @@ expr:
 
         |   expr ADD expr
             {
-                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: ADD type incompatable");
+                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: ADD type incompatable");
                 if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
-                $$ = (char*)($1);
+                else $$ = (char*)($1);
             }
 
         |   expr SUB expr
             {
-                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: SUB type incompatable");
+                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: SUB type incompatable");
                 if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
-                $$ = (char*)($1);
+                else $$ = (char*)($1);
             }
 
         |   expr MUL expr
             {
-                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: MUL type incompatable");
+                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: MUL type incompatable");
                 if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
-                $$ = (char*)($1);
+                else $$ = (char*)($1);
             }
 
         |   expr DIV expr
             {
-                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: DIV type incompatable");
+                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: DIV type incompatable");
                 if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
-                $$ = (char*)($1);
+                else $$ = (char*)($1);
             }
 
         |   expr MOD expr
             {
-                if((char*)($1) == "string" || (char*)($3) == "string") yyerror("type error: MOD type incompatable");
-                $$ = (char*)($1);
+                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: MOD type incompatable");
+                else $$ = (char*)($1);
             }
 
         |   expr GT expr
