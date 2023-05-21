@@ -80,11 +80,15 @@ char strBuf[MAX_LINE_LENG];
 "var"	        {token(VAR);}
 "when"	        {token(WHEN);}
 "false"	        {
+	LIST;
 	yylval.boolVal = false;
+	printf("<FALSE>\n");
 	return BOOL_VAL;
 }
 "true"	        {
+	LIST;
 	yylval.boolVal = true;
+	printf("<TRUE>\n");
 	return BOOL_VAL;
 }
 [0-9]+	        {
@@ -183,7 +187,7 @@ char strBuf[MAX_LINE_LENG];
         LIST;
         printf("%d: %s", linenum++, buf);
         buf[0] = '\0';
-    }
+	}
 
 [ \t]*	{LIST;}
 
