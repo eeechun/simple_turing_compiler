@@ -93,49 +93,49 @@ types:
 /*constant*/
 const_declare:  CONST ID COLON types ASSIGN expr
                 {
-                    if(string($4) != string($6)) yyerror("type error: not compatible");
+                    if(string($4) != string($6)) cout<<"<type error: not compatible>\n";
                     if(table->lookup(scopeTemp, string($2)) == -1){
                         table->insert(string($2), scopeTemp, (char*)($4), "constant");
                     }
-                    else yyerror("Constant had declared.");
+                    else cout<<"<redefinition: Constant had declared.>\n";
                 }
                 |
                 CONST ID ASSIGN expr
                 {
                     if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($4), "constant");
-                    else yyerror("Constant had declared.");
+                    else cout<<"<redefinition: Constant had declared.>\n";
                 }
                 ;
 /*variable*/
 var_declare:    VAR ID COLON types ASSIGN expr //type & expr
                 {
-                    if(string($4) != string($6)) yyerror("type error: not compatible");
+                    if(string($4) != string($6)) cout<<"type error: not compatible\n";
                     if(table->lookup(scopeTemp, string($2)) == -1){
                         table->insert(string($2), scopeTemp, (char*)($4), "variable");
                     }
-                    else yyerror("variable had declared.");
+                    else cout<<"<redefinition: variable had declared.>\n";
                 }
                 |
                 VAR ID ASSIGN expr  //expr
                 {
                     if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($4), "variable");
-                    else yyerror("variable had declared.");
+                    else cout<<"<redefinition: variable had declared.>\n";
                 }
                 |
                 VAR ID COLON types //type
                 {
                     if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($4), "variable");
-                    else yyerror("variable had declared.");
+                    else cout<<"<redefinition: variable had declared.>\n";
                 };
 
 /*array*/
 array_declare:
                 VAR ID COLON ARRAY expr DOT DOT expr OF types
                 {
-                    if(string($5) != string($8)) yyerror("type error: type incompatable");
-                    if(string($5) != "integer" || string($8) != "integer") yyerror("type error: array size must be integer");
+                    if(string($5) != string($8)) cout<<"<type error: type incompatable>\n";
+                    if(string($5) != "integer" || string($8) != "integer") cout<<"<type error: array size must be integer>\n";
                     if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($10), "array");
-                    else yyerror("array had declared.");
+                    else cout<<"<redefinition: array had declared.>\n";
                     $$ = (char*)($10);
                 };
 
@@ -166,8 +166,8 @@ func_declare:
             PARENTHESES_L params PARENTHESES_R COLON types opt_empty END ID
             {
                 if(table->lookup("global", string($2)) == -1) table->insert(string($2), "global", (char*)($8) , "function");
-                else yyerror("ERROR: redefinition");
-                if(returnType != string($8)) yyerror("type error: function return in the wrong type");
+                else cout<<"redefinition: function had declared\n";
+                if(returnType != string($8)) cout<<"<type error: function return in the wrong type>\n";
                 scopeTemp = string($2);
                 table->dump(scopeTemp);
             };
@@ -183,11 +183,11 @@ proc_declare:
                 scopeTemp = string($2);
                 cout<<"start procedure\n";
                 if(table->lookup("global", string($2)) == -1) table->insert(string($2), "global", (char*)"void", "procedure");
-                else yyerror("ERROR: redefinition");
+                else cout<<"<redefinition: procedure has declared>\n";
             }
             PARENTHESES_L params PARENTHESES_R opt_empty END ID
             {
-                if(returnType != "void") yyerror("type error: no return in procedure");
+                if(returnType != "void") cout<<"<type error: no return in procedure>\n";
                 scopeTemp = string($2);
                 table->dump(scopeTemp);
             };
@@ -208,7 +208,7 @@ param:  ID COLON types
                 parameter_vector.push_back(p);
                 
             }
-            else yyerror("parameter had declared.");
+            else cout<< "<redefinition: parameter had declared.>\n";
         }
         |%empty
         ;
@@ -245,7 +245,7 @@ expr:
         |   ID 
             {
                 Symbol* id_d = table->getItem(scopeTemp, string($1));
-                if(id_d == nullptr) yyerror("ID not found");
+                if(id_d == nullptr) cout<<"<Error: symbol not found>\n";
                 if(id_d->flag == "function" || id_d->flag == "procedure") argumentFlag = true;
                 $$ = (char*)id_d->valueType;
             }
@@ -259,94 +259,94 @@ expr:
         |   SUB expr %prec UMINUS
             {
                 if ((char*)($2) == "integer" || (char*)($2) == "real" || (char*)($2)== "str") $$ = (char*)($2);
-                else yyerror("UMINUS type error");
+                else cout<<"<type error: UMINUS type error>\n";
             }
 
         |   expr ADD expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: ADD type incompatable");
+                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: ADD type incompatable>\n";
                 if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
                 else $$ = (char*)($1);
             }
 
         |   expr SUB expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: SUB type incompatable");
+                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: SUB type incompatable>\n";
                 if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
                 else $$ = (char*)($1);
             }
 
         |   expr MUL expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: MUL type incompatable");
+                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: MUL type incompatable>\n";
                 if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
                 else $$ = (char*)($1);
             }
 
         |   expr DIV expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: DIV type incompatable");
+                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: DIV type incompatable>\n";
                 if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
                 else $$ = (char*)($1);
             }
 
         |   expr MOD expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") yyerror("type error: MOD type incompatable");
+                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: MOD type incompatable>\n";
                 else $$ = (char*)($1);
             }
 
         |   expr GT expr
             {
-                if((char*)($1) != (char*)($3)) yyerror("type error: GT type incompatable");
+                if((char*)($1) != (char*)($3)) cout<<"<type error: GT type incompatable>\n";
                 $$ = (char*)"boolean";
             }
 
         |   expr GE expr
             {
-                if((char*)($1) != (char*)($3)) yyerror("type error: GE type incompatable");
+                if((char*)($1) != (char*)($3)) cout<<"<type error: GE type incompatable>\n";
                 $$ = (char*)"boolean";
             }
 
         |   expr LT expr
             {
-                if((char*)($1) != (char*)($3)) yyerror("type error: LT type incompatable");
+                if((char*)($1) != (char*)($3)) cout<<"<type error: LT type incompatable>\n";
                 $$ = (char*)"boolean";
             }
 
         |   expr LE expr
             {
-                if((char*)($1) != (char*)($3)) yyerror("type error: LE type incompatable");
+                if((char*)($1) != (char*)($3)) cout<<"<type error: LE type incompatable>\n";
                 $$ = (char*)"boolean";
             }
 
         |   expr EQ expr
             {
-                if((char*)($1) != (char*)($3)) yyerror("type error: EQ type incompatable");
+                if((char*)($1) != (char*)($3)) cout<<"<type error: EQ type incompatable>\n";
                 $$ = (char*)"boolean";
             }
 
         |   expr NE expr
             {
-                if((char*)($1) != (char*)($3)) yyerror("type error: NE type incompatable");
+                if((char*)($1) != (char*)($3)) cout<<"<type error: NE type incompatable>\n";
                 $$ = (char*)"boolean";
             }
 
         |   expr AND expr
             {
-                if((char*)($1) != (char*)($3)) yyerror("type error: AND type incompatable");
+                if((char*)($1) != (char*)($3)) cout<<"<type error: AND type incompatable>\n";
                 $$ = (char*)"boolean";
             }
 
         |   expr OR expr
             {
-                if((char*)($1) != (char*)($3)) yyerror("type error: OR type incompatable");
+                if((char*)($1) != (char*)($3)) cout<<"<type error: OR type incompatable>\n";
                 $$ = (char*)"boolean";
             }
 
         |   NOT expr
             {
-                if((char*)($2) != "boolean") yyerror("type error: NOT expression only allows boolean type");
+                if((char*)($2) != "boolean") cout<<"<type error: NOT expression only allows boolean type>\n";
                 $$ = (char*)"boolean";
             }
 
@@ -359,7 +359,7 @@ expr:
 bool_expr:  
             expr 
             {  
-                if((char*)($1) != "boolean") yyerror("type error: not boolean");
+                if((char*)($1) != "boolean") cout<<"<type error: not boolean>\n";
             };
 
 /*statement*/
@@ -380,12 +380,12 @@ simple_stmt:
         ID ASSIGN expr
         {
             Symbol* id_d = table->getItem(scopeTemp, string($1));
-            if(id_d->valueType != (char*)($3)) printf("!!! warning: type implicit conversion !!!\n");
+            if(id_d->valueType != (char*)($3)) cout<<"<warning: type implicit conversion>\n";
         }
         |
         array_ref ASSIGN expr
         {
-            if((char*)($1) != (char*)($3)) yyerror("type error: array assign denied");
+            if((char*)($1) != (char*)($3)) cout<<"<type error: array assign denied>\n";
         }
         |
         PUT expr
@@ -456,16 +456,16 @@ for_loop:
 invocation:
             ID PARENTHESES_L arguments_empty PARENTHESES_R
             {
-                if(countPara(scopeTemp) != countArgu(scopeTemp)) yyerror("arguments and parameters not match");
+                if(countPara(scopeTemp) != countArgu(scopeTemp)) cout<<"<Exception: Incorrect number of arguments>\n";
                 for(auto i: parameter_vector){
                     for(auto j: argument_vector){
                         if(i.scope != j.scope) continue;
-                        if(i.valueType != j.valueType) yyerror("type error: arguments and parameters not match");
+                        if(i.valueType != j.valueType) cout<<"<type error: parameter type mismatch>\n";
                     }
                 }
                 
                 Symbol* temp = table->getItem("global", scopeTemp);
-                if(temp == nullptr) yyerror("invoke failed: not found");
+                if(temp == nullptr) cout<<"<Invocation error: symbol not found>\n";
                 $$ = (char*)(temp->valueType);
             };
 
