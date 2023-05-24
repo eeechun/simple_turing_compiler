@@ -7,9 +7,9 @@
 using namespace std;
 
 #define LIST     strcat(buf,yytext)
-#define token(t) {LIST; printf("<%s>\n",#t); return(t);}
-#define tokenInteger(t,i) {LIST; printf("<%s: %s>\n",#t,i);}
-#define tokenString(t,s) {LIST; printf("<%s: %s>\n",#t,s);}
+#define token(t) {LIST; /*printf("<%s>\n",#t);*/ return(t);}
+#define tokenInteger(t,i) {LIST; /*printf("<%s: %s>\n",#t,i);*/}
+#define tokenString(t,s) {LIST; /*printf("<%s: %s>\n",#t,s);*/}
 #define yyinput input
 #define MAX_LINE_LENG 256
 
@@ -82,13 +82,13 @@ char strBuf[MAX_LINE_LENG];
 "false"	        {
 	LIST;
 	yylval.boolVal = false;
-	printf("<FALSE>\n");
+	//printf("<FALSE>\n");
 	return BOOL_VAL;
 }
 "true"	        {
 	LIST;
 	yylval.boolVal = true;
-	printf("<TRUE>\n");
+	//printf("<TRUE>\n");
 	return BOOL_VAL;
 }
 [0-9]+	        {
