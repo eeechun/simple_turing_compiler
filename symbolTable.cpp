@@ -8,13 +8,18 @@ symbolTable::symbolTable(){
 	symbols.clear();
 }
 
-int symbolTable::insert(string id, string sscope, char* stype, string sflag){
-	Symbol detail;
-	detail.name = id;
-	detail.scope = sscope;
-	detail.valueType = stype;
-	detail.flag = sflag;
-	symbols.push_back(detail);
+int symbolTable::insert(int idx, string id, Value svalue, string sscope, char* stype, string sflag){
+	Symbol sym;
+	sym.localidx = idx;
+	sym.name = id;
+	sym.value = svalue;
+	sym.scope = sscope;
+	sym.valueType = stype;
+	sym.flag = sflag;
+	symbols.push_back(sym);
+
+	if(sscope == "global") global.push_back(sym);
+	else local.push_back(sym);
 
 	return 1;
 }
@@ -30,25 +35,28 @@ int symbolTable::lookup(string sscope, string id){
 	}
 }
 
-Symbol* symbolTable::getItem(string sscope, string id){
-	vector<Symbol>::iterator it = find_if(symbols.begin(), symbols.end(), [id](const Symbol& s) { return s.name == id; });
+Symbol* symbolTable::getLocal(string id){
+	vector<Symbol>::iterator it = find_if(local.begin(), local.end(), [id](const Symbol& s) { return s.name == id; });
 	if(it == symbols.end()) return nullptr;
-	if (symbols.at(distance(symbols.begin(), it)).scope != sscope)
-	{
-		vector<Symbol>::iterator it2 = find_if(it, symbols.end(), [id](const Symbol& s) { return s.name == id; });
-		if(it2 != symbols.end()){
-			return &symbols.at(distance(symbols.begin(), it));
-		}
-		else return nullptr;
+	else return &local.at(distance(local.begin(), it));
+}
+
+Symbol* symbolTable::getItem(string id){
+	vector<Symbol>::iterator it = find_if(local.begin(), local.end(), [id](const Symbol& s) { return s.name == id; });
+	if(it == local.end()) {
+		vector<Symbol>::iterator it2 = find_if(global.begin(), global.end(), [id](const Symbol& s) { return s.name == id; });
+		if(it2 == global.end()) return nullptr;
+		else return &global.at(distance(global.begin(), it2));
 	}
-	else{
-		return &symbols.at(distance(symbols.begin(), it));
-	}
+	else return &local.at(distance(local.begin(), it));
 }
 
 void symbolTable::removeItem(string sscope){
 	vector<Symbol>::iterator it = remove_if(symbols.begin(), symbols.end(), [sscope](const Symbol& s) { return s.scope == sscope; });
 	symbols.erase(it,symbols.end());
+
+	vector<Symbol>::iterator it2 = remove_if(local.begin(), local.end(), [sscope](const Symbol& s) { return s.scope == sscope; });
+	local.erase(it2,local.end());
 }
 
 void symbolTable::dump(string sscope){
@@ -56,8 +64,8 @@ void symbolTable::dump(string sscope){
 	
 	int colWidth = 20;
 	cout << setw(colWidth) << "id" << setw(colWidth) << "scope" << setw(colWidth) << "type" 
-		<< setw(colWidth) << "flag" << "\n";
-	cout << "----------------------------------------------------------------------------------\n";
+		<< setw(colWidth) /*<< "value" << setw(colWidth)*/ << "flag" << setw(colWidth) << "local index" << "\n";
+	cout << "---------------------------------------------------------------------------------------------------------\n";
 
 	for(auto i : symbols){
 		if(i.scope == sscope){
@@ -66,11 +74,18 @@ void symbolTable::dump(string sscope){
 	}
 	for(auto i : dumpTable){
 		cout << setw(colWidth) << i.name << setw(colWidth) << i.scope << setw(colWidth) 
-				<< i.valueType << setw(colWidth) << i.flag << "\n";
+				<< i.valueType << setw(colWidth);
+
+		/*if(i.valueType == "int") cout << i.value.intVal << setw(colWidth);
+		else if(i.valueType == "real") cout << i.value.dVal << setw(colWidth);
+		else if(i.valueType == "str") cout << i.value.strVal << setw(colWidth);
+		else if(i.valueType == "boolean") cout << i.value.boolVal << setw(colWidth);*/
+
+		cout << i.flag << setw(colWidth) << i.localidx << "\n";
 	}
 
 	dumpTable.clear();
-	cout << "----------------------------------------------------------------------------------\n";
+	cout << "---------------------------------------------------------------------------------------------------------\n";
 
 	if(sscope != "global") removeItem(sscope);
 }

@@ -4,6 +4,7 @@
 #include "stdlib.h"
 #include "y.tab.hpp"
 #include <iostream>
+
 using namespace std;
 
 #define LIST     strcat(buf,yytext)
@@ -19,7 +20,7 @@ int str_flag = 1;
 int str_init = 0;
 char buf[MAX_LINE_LENG];
 char strBuf[MAX_LINE_LENG];
-
+ofstream assFile;
 %}
 
 %x STR
@@ -47,7 +48,7 @@ char strBuf[MAX_LINE_LENG];
 ">="	    	{token(GE);}
 ">"	        	{token(GT);}
 "="	        	{token(EQ);}
-"not ="	        {token(NE);}
+"not="	        {token(NE);}
 "and"	        {token(AND);}
 "or"			{token(OR);}
 "not"	        {token(NOT);}
@@ -82,13 +83,11 @@ char strBuf[MAX_LINE_LENG];
 "false"	        {
 	LIST;
 	yylval.boolVal = false;
-	//printf("<FALSE>\n");
 	return BOOL_VAL;
 }
 "true"	        {
 	LIST;
 	yylval.boolVal = true;
-	//printf("<TRUE>\n");
 	return BOOL_VAL;
 }
 [0-9]+	        {
@@ -108,13 +107,13 @@ char strBuf[MAX_LINE_LENG];
 }
 [A-Za-z]([A-Za-z]|[0-9]+)*		{
 	str_flag = 0;
-	tokenString("id",yytext);
+	tokenString(id,yytext);
 	yylval.strVal = strdup(yytext);
 	return ID;
 }
 
 "\"" {
-	str_init = 1;
+		str_init = 1;
         LIST;
         strBuf[0]='\0';
         BEGIN STR;   	
@@ -133,6 +132,7 @@ char strBuf[MAX_LINE_LENG];
 			yylval.strVal = strdup(strBuf);
         	unput(c);
         	BEGIN INITIAL;
+			
 			return STR_VAL;	
         }
         else{
@@ -152,7 +152,7 @@ char strBuf[MAX_LINE_LENG];
 		printf("<\">\n");
 	}
 	if(strBuf[0] != '\0'){
-		tokenString(id, yytext);
+		tokenString(id, strBuf);
 		yylval.strVal = strdup(strBuf);
 	}
 	unput('\n');
@@ -184,9 +184,12 @@ char strBuf[MAX_LINE_LENG];
 
 \n  {
 		str_flag = 1 ;
+		assFile << "/* " << linenum+1 << ": " << buf <<"*/\n";
         LIST;
         printf("%d: %s", linenum++, buf);
+		
         buf[0] = '\0';
+		
 	}
 
 [ \t]*	{LIST;}
@@ -194,6 +197,7 @@ char strBuf[MAX_LINE_LENG];
 .	{
         LIST;
         printf("%d:%s\n", linenum+1, buf);
+		//assFile << "/* " << linenum+1 << ": " << buf <<"*/\n";
         printf("bad character:'%s'\n",yytext);
         exit(-1);
 }

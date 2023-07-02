@@ -1,24 +1,49 @@
 %{
-#include "string.h"
 #include <iostream>
 #include <stdio.h>
 #include <vector>
-#include <unordered_map>
-#include "lex.yy.cpp"
+#include <string>
+#include <stack>
+#include <fstream>
 #include "symbolTable.hpp"
+#include "codeGenerate.hpp"
+#include "lex.yy.cpp"
 using namespace std;
 #define Trace(t)        printf(t)
 
+//ofstream assFile;
+string className;
+
 symbolTable* table = new symbolTable();
 string scopeTemp = "global";
+string pre_scope = "global";
 string returnType = "void";
 string func_name = "";
+
+int localCnt = -1;
+int pre_idx = -1;
+int elseFlag = 0;
+int mainFlag = 0;
+int varFlag = 0;
+int constFlag = 0;
+int boolCondFlag = 0;
+int getstaticFlag = 0;
+int loopFlag = 0;
+int localFlag = 0;
+int forLoopFlag = 0;
+int branchCount = 0;
+
+
 bool argumentFlag = false;
 
 void yyerror(string s);
 
 vector<Symbol> argument_vector;
 vector<Symbol> parameter_vector;
+vector<string> paramTypes;
+vector<string> arguTypes;
+
+stack<int> branchStack;
 
 int countPara(string sscope){
     int cnt = count_if(parameter_vector.begin(), parameter_vector.end(), [sscope](const Symbol& s) { return s.scope == sscope; });
@@ -34,12 +59,12 @@ void show(){
     for(auto i: parameter_vector){
 
         cout<< "parameters:\n";
-        cout << i.name<<" "<<i.scope<<" "<<i.valueType<<" "<<i.flag<<"\n";  
+        cout << i.name<<" "<<i.scope<< " "<<i.valueType<<" "<<i.flag<<"\n";  
     }
     for(auto i: argument_vector){
         
         cout<< "arguments:\n";
-        cout << i.name<<" "<<i.scope<<" "<<i.valueType<<" "<<i.flag<<"\n";
+        cout << i.name<<" "<<i.scope<<" " <<i.value.intVal<<" "<<i.valueType<<" "<<i.flag<<"\n";
             
     }
     cout<<"=====================================================\n";
@@ -52,6 +77,7 @@ void show(){
     double dVal;
     char* strVal;
     bool boolVal;
+    Symbol* symbol;
 }
 
 /* tokens */
@@ -66,7 +92,8 @@ void show(){
 %token <strVal>     STR_VAL
 %token <strVal>     ID
 
-%type <strVal> types array_declare array_ref func_declare expr invocation
+%type <strVal> types 
+%type <symbol> expr func_declare invocation
 
 /*priority*/
 %left OR
@@ -80,11 +107,11 @@ void show(){
 %start program
 
 %%
-program:    opts | stmts | opts stmts | %empty;
+program:   opt;
 
 /*variable type*/
 types: 
-        INT     { $$ = (char*)"integer"; }
+        INT     { $$ = (char*)"int"; }
     |   STRING  { $$ = (char*)"str"; }
     |   BOOL    { $$ = (char*)"boolean"; }
     |   REAL    { $$ = (char*)"real"; }
@@ -93,103 +120,270 @@ types:
 /*constant*/
 const_declare:  CONST ID COLON types ASSIGN expr
                 {
-                    if(string($4) != string($6)) cout<<"<type error: not compatible>\n";
+                    constFlag = 1;
+                    if((char*)$4 != ($6)->valueType) cout << "<type error: not compatible>\n";
                     if(table->lookup(scopeTemp, string($2)) == -1){
-                        table->insert(string($2), scopeTemp, (char*)($4), "constant");
+                        table->insert(localCnt, string($2), ($6)->value, scopeTemp, (char*)($4), "constant");
                     }
-                    else cout<<"<redefinition: Constant had declared.>\n";
+                    else cout<<"<error: Constant redefinition.>\n";
+
+                    constFlag = 0;
                 }
                 |
                 CONST ID ASSIGN expr
                 {
-                    if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($4), "constant");
-                    else cout<<"<redefinition: Constant had declared.>\n";
+                    constFlag = 1;
+                    if(table->lookup(scopeTemp, string($2)) == -1) {
+                        table->insert(localCnt, string($2), ($4)->value, scopeTemp, ($4)->valueType, "constant");
+                    }
+                    else cout<<"<error: Constant redefinition.>\n";
+
+                    constFlag = 0;
                 }
                 ;
 /*variable*/
 var_declare:    VAR ID COLON types ASSIGN expr //type & expr
                 {
-                    if(string($4) != string($6)) cout<<"type error: not compatible\n";
+                    varFlag = 1;
+                    if((char*)($4) != ($6)->valueType) cout << "<type error: not compatible>\n";
+
+                    if(localFlag) localCnt++;
+                    cout << "[current local count: " << localCnt << "]\n";
+
                     if(table->lookup(scopeTemp, string($2)) == -1){
-                        table->insert(string($2), scopeTemp, (char*)($4), "variable");
+                        table->insert(localCnt, string($2), ($6)->value, scopeTemp, (char*)($4), "variable");
                     }
-                    else cout<<"<redefinition: variable had declared.>\n";
+                    else cout<<"<error: Variable redefinition.>\n";
+
+                    Symbol* tmp = table->getItem(string($2));
+                    if(tmp == nullptr) cout<<"<error: variable not inserted.>\n";
+                    else{
+                        if(!localFlag){
+                            if($4 == (char*)"int"){
+                                pushGlobalIntVar(tmp->name, ($6)->value.intVal);
+                            }
+                            else if($4 == (char*)"boolean"){
+                                pushGlobalIntVar(tmp->name, ($6)->value.boolVal);
+                            }
+                        }
+                        else{
+                            if($4 == (char*)"int"){
+                                pushLocalIntVar(($6)->value.intVal, localCnt);
+                            }
+                            else if($4 == (char*)"boolean"){
+                                pushLocalBoolVar(($6)->value.boolVal, localCnt);
+                            }
+                            
+                        }
+                    }
+                    varFlag = 0;
                 }
                 |
                 VAR ID ASSIGN expr  //expr
                 {
-                    if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($4), "variable");
-                    else cout<<"<redefinition: variable had declared.>\n";
+                    varFlag = 1;
+                    if(localFlag) localCnt++;
+                    cout << "[current local count: " << localCnt << "]\n";
+
+                    if(table->lookup(scopeTemp, string($2)) == -1){
+                        table->insert(localCnt, string($2), ($4)->value, scopeTemp, ($4)->valueType, "variable");
+                    }
+                    else cout<<"<error: Variable redefinition.>\n";
+
+                    Symbol* tmp = table->getItem(string($2));
+                    if(tmp == nullptr) cout<<"<error: variable not inserted.>\n";
+                    else{
+                        if(!localFlag){
+                            if($4->valueType == (char*)"int"){
+                                pushGlobalIntVar(tmp->name, ($4)->value.intVal);
+                            }
+                            else if($4->valueType == (char*)"boolean"){
+                                pushGlobalIntVar(tmp->name, ($4)->value.boolVal);
+                            }
+                        }
+                        else{
+                            if($4->valueType == (char*)"int"){
+                                pushLocalIntVar(($4)->value.intVal, localCnt);
+                            }
+                            else if($4->valueType == (char*)"boolean"){
+                                pushLocalBoolVar(($4)->value.boolVal, localCnt);
+                            }
+                            
+                        }
+                    }
+                    varFlag = 0;
                 }
                 |
                 VAR ID COLON types //type
                 {
-                    if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($4), "variable");
-                    else cout<<"<redefinition: variable had declared.>\n";
-                };
+                    varFlag = 1;
+                    Value v;
+                    if(localFlag) localCnt++;
+                    cout << "[current local count: " << localCnt << "]\n";
+
+                    if(table->lookup(scopeTemp, string($2)) == -1){
+                        table->insert(localCnt, string($2), v, scopeTemp, (char*)($4), "variable");
+                    }
+                    else cout<<"<error: Variable redefinition.>\n";
+
+                    Symbol* tmp = table->getItem(string($2));
+                    if(tmp == nullptr) cout<<"<error: variable not inserted.>\n";
+                    else{
+                        if(!localFlag){
+                            if($4 == (char*)"int"){
+                                pushGlobalIntVar(tmp->name);
+                            }
+                            else if($4 == (char*)"boolean"){
+                                pushGlobalBoolVar(tmp->name);
+                            }
+                        }
+                        else{
+                            if($4 == (char*)"int"){
+                                pushLocalIntVar(0, localCnt);
+                            }
+                            //else if($4 == (char*)"boolean"){
+                            //    storeLocalVar(tmp->localidx);
+                            //}
+                            
+                        }
+                    }
+                    varFlag = 0;
+                }
+                ;
 
 /*array*/
-array_declare:
-                VAR ID COLON ARRAY expr DOT DOT expr OF types
-                {
-                    if(string($5) != string($8)) cout<<"<type error: type incompatable>\n";
-                    if(string($5) != "integer" || string($8) != "integer") cout<<"<type error: array size must be integer>\n";
-                    if(table->lookup(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($10), "array");
-                    else cout<<"<redefinition: array had declared.>\n";
-                    $$ = (char*)($10);
-                };
-
-array_ref:  ID SQUARE_BRACKETS_L expr SQUARE_BRACKETS_R 
-            {
-                Symbol* id_d = table->getItem(scopeTemp, string($1));
-                $$ = (char*)id_d->valueType;
-            }
-
-/*blocks*/
+//array_declare:
+//                VAR ID COLON ARRAY expr DOT DOT expr OF types
+//                {
+//                    if(string($5) != string($8)) cout<<"<type error: type incompatable>\n";
+//                    if(string($5) != "int" || string($8) != "int") cout<<"<type error: array size must be integer>\n";
+//                    if(table->getItem(scopeTemp, string($2)) == -1) table->insert(string($2), scopeTemp, (char*)($10), "array");
+//                    else cout<<"<redefinition: array had declared.>\n";
+//                    $$ = (char*)($10);
+//                }
+//                ;
+//
+//array_ref:  ID SQUARE_BRACKETS_L expr SQUARE_BRACKETS_R 
+//            {
+//                Symbol* id_d = table->getItem(scopeTemp, string($1));
+//                $$ = (char*)id_d->valueType;
+//            }
+//            ;
+//
+///*blocks*/
 block:      BEGIN_
+            {   
+                localFlag = 1;
+                pre_scope = scopeTemp;
+                if(pre_scope != "global"){
+                    pre_idx = localCnt;
+                    localCnt = -1;
+                }
+                scopeTemp = "block";
+            }
+            opt
             {
                 scopeTemp = "block";
             }
-            opt_empty END
+            END
             {
-                scopeTemp = "block";
                 table->dump(scopeTemp);
-                scopeTemp = "global";
+                scopeTemp = pre_scope;
+                if(pre_scope != "global"){
+                    localCnt = pre_idx;
+                }
+                else localCnt = -1;
+                localFlag = 0;
             };
 
 /*function*/
 func_declare:
             FUNCTION ID 
             {
+                localFlag = 1;
+                pre_scope = scopeTemp;
+                if(pre_scope != "global"){
+                    pre_idx = localCnt;
+                    localCnt = -1;
+                }
                 scopeTemp = string($2);
             }    
-            PARENTHESES_L params PARENTHESES_R COLON types opt_empty END ID
+            PARENTHESES_L params PARENTHESES_R COLON types 
             {
-                if(table->lookup("global", string($2)) == -1) table->insert(string($2), "global", (char*)($8) , "function");
+                Value v;
+                if(table->lookup(scopeTemp, string($2)) == -1) table->insert(-1, string($2), v, "global", (char*)($8) , "function");
                 else cout<<"redefinition: function had declared\n";
-                if(returnType != string($8)) cout<<"<type error: function return in the wrong type>\n";
                 scopeTemp = string($2);
-                table->dump(scopeTemp);
+
+                if(paramTypes.empty()){
+                    if((string)($8) == "int") typeFunc((string)($2), (string)($8));
+                    else if((string)($8) == "boolean") boolFunc((string)($2), (string)($8));
+                }
+                else{
+                    if((string)($8) == "int") typeFunc((string)($2), (string)($8), paramTypes);
+                    else if((string)($8) == (string)"boolean") boolFunc((string)($2), (string)($8), paramTypes);
+                }
+            }
+            opt
+            {
+                if(returnType != string($8)) cout<<"<type error: function return in the wrong type>\n";
+            }
+            END ID
+            {
+                typeFuncEnd();
+                paramTypes.clear();
+                table->dump(string($2));
+                
+                scopeTemp = pre_scope;
+                if(pre_scope != "global"){
+                    localCnt = pre_idx;
+                }
+                else localCnt = -1;
+
+                localFlag = 0;
             };
 
-opt_block: opt | stmt;
-opt_blocks:  opt_block | opt_block opt_blocks;
-opt_empty:  %empty | opt_blocks;
+//opt_block: opt | stmt;
+//opt_blocks:  opt_block | opt_block opt_blocks;
+//opt_empty:  %empty | opt_blocks;
 
 /*procedure*/
 proc_declare:
             PROCEDURE ID
             {
+                localFlag = 1;
+                pre_scope = scopeTemp;
+                if(pre_scope != "global"){
+                    pre_idx = localCnt;
+                    localCnt = -1;
+                }
                 scopeTemp = string($2);
-                cout<<"start procedure\n";
-                if(table->lookup("global", string($2)) == -1) table->insert(string($2), "global", (char*)"void", "procedure");
+                Value v;
+                if(table->lookup(scopeTemp, string($2)) == -1) table->insert(-1, string($2), v, "global", (char*)"void", "procedure");
                 else cout<<"<redefinition: procedure has declared>\n";
             }
-            PARENTHESES_L params PARENTHESES_R opt_empty END ID
+            PARENTHESES_L params PARENTHESES_R
+            {
+                scopeTemp = string($2);
+                if(paramTypes.empty()) voidFunc((string)($2));
+                else voidFunc((string)($2), paramTypes);
+            }
+            opt
             {
                 if(returnType != "void") cout<<"<type error: no return in procedure>\n";
+            }
+            END ID
+            {
                 scopeTemp = string($2);
+                paramTypes.clear();
                 table->dump(scopeTemp);
+                voidFuncEnd();
+                scopeTemp = pre_scope;
+                if(pre_scope != "global"){
+                    localCnt = pre_idx;
+                }
+                else localCnt = -1;
+                localFlag = 1;
             };
 
 
@@ -198,175 +392,1051 @@ params:  param | param COMMA params;
 param:  ID COLON types
         {
             Symbol p;
+            Value v;
+            localCnt++;
             if(table->lookup(scopeTemp, string($1)) == -1){
-                table->insert(string($1), scopeTemp, (char*)($3), "parameter");
-
+                table->insert(localCnt, string($1), v, scopeTemp, (char*)($3), "parameter");
                 p.name = string($1);
                 p.scope = scopeTemp;
                 p.valueType = (char*)($3);
                 p.flag = "parameter";
-                parameter_vector.push_back(p);
-                
+                parameter_vector.push_back(p);           
+                paramTypes.push_back((string)($3));     
             }
             else cout<< "<redefinition: parameter had declared.>\n";
+            
+        }
+        |
+        expr
+        {
+            Symbol argu;
+            argu.name = ($1)->name;
+            argu.scope = func_name;
+            argu.valueType = ($1)->valueType;
+            argu.value = ($1)->value;
+            argu.flag = "argument";
+            argument_vector.push_back(argu);
+            arguTypes.push_back(argu.valueType);
+            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+            else if(($1)->flag == "variable"){
+                if(($1)->valueType == "int") getGlobalIntVar(($1)->name);
+                else getGlobalBoolVar(($1)->name);
+            }
         }
         |%empty
         ;
 
 
 /*expression*/
-exprs:      expr
-            {
-                func_name = scopeTemp;
-                Symbol argu;
-                argu.name = "";
-                argu.scope = func_name;
-                argu.valueType = (char*)($1);
-                argu.flag = "argument";
-                argument_vector.push_back(argu);
+/*exprs:  expr
+        {
+            Symbol argu;
+            argu.name = ($1)->name;
+            argu.scope = func_name;
+            argu.valueType = ($1)->valueType;
+            argu.value = ($1)->value;
+            argu.flag = "argument";
+            argument_vector.push_back(argu);
+            arguTypes.push_back(argu.valueType);
+            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+            else if(($1)->flag == "variable"){
+                if(($1)->valueType == "int") getGlobalIntVar(($1)->name);
+                else getGlobalBoolVar(($1)->name);
             }
-        |   expr COMMA exprs
-            {
-                func_name = scopeTemp;
-                Symbol argu;
-                argu.name = "";
-                argu.scope = func_name;
-                argu.valueType = (char*)($1);
-                argu.flag = "argument";
-                argument_vector.push_back(argu);
-            };
-
+        }
+        | 
+        expr COMMA exprs
+        {
+            Symbol argu;
+            argu.name = ($1)->name;
+            argu.scope = func_name;
+            argu.valueType = ($1)->valueType;
+            argu.value = ($1)->value;
+            argu.flag = "argument";
+            argument_vector.push_back(argu);
+            arguTypes.push_back(argu.valueType);
+            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+            else if(($1)->flag == "variable"){
+                if(($1)->valueType == "int") getGlobalIntVar(($1)->name);
+                else getGlobalBoolVar(($1)->name);
+            }
+        };*/
 expr:       
-            INT_VAL     { $$ = (char*)"integer"; }
-        |   STR_VAL     { $$ = (char*)"str"; }
-        |   BOOL_VAL    { $$ = (char*)"boolean"; }
-        |   REAL_VAL    { $$ = (char*)"real"; }
-
+            INT_VAL
+            { 
+                Symbol *tmp = new Symbol();
+                tmp->valueType = (char*)"int";
+                tmp->value.intVal = $1;
+                tmp->scope = scopeTemp;
+                if(varFlag == 1) tmp->flag = "variable";
+                else if(constFlag == 1) tmp->flag = "constant";
+                else tmp->flag = "constant";
+                $$ = tmp;
+            }
+        |   STR_VAL
+            { 
+                Symbol *tmp = new Symbol();
+                tmp->valueType = (char*)"str";
+                tmp->value.strVal = $1;
+                tmp->scope = scopeTemp;
+                if(varFlag == 1) tmp->flag = "variable";
+                else if(constFlag == 1) tmp->flag = "constant";
+                else tmp->flag = "constant";
+                $$ = tmp;
+            }
+        |   BOOL_VAL
+            { 
+                Symbol *tmp = new Symbol();
+                tmp->valueType = (char*)"boolean";
+                tmp->value.boolVal = $1;
+                tmp->scope = scopeTemp;
+                if(varFlag == 1) tmp->flag = "variable";
+                else if(constFlag == 1) tmp->flag = "constant";
+                else tmp->flag = "constant";
+                $$ = tmp;
+            }
+        |   REAL_VAL
+            { 
+                Symbol *tmp = new Symbol();
+                tmp->valueType = (char*)"real";
+                tmp->value.dVal = $1;
+                tmp->scope = scopeTemp;
+                if(varFlag == 1) tmp->flag = "variable";
+                else if(constFlag == 1) tmp->flag = "constant";
+                $$ = tmp;
+            }
         |   ID 
             {
-                Symbol* id_d = table->getItem(scopeTemp, string($1));
-                if(id_d == nullptr) cout<<"<Error: symbol not found>\n";
+                Symbol* id_d = table->getItem(string($1));
+                if(id_d == nullptr) cout<<"<Error: " << string($1) <<" not found>\n";
                 if(id_d->flag == "function" || id_d->flag == "procedure") argumentFlag = true;
-                $$ = (char*)id_d->valueType;
+                $$ = id_d;
             }
 
-        |   array_declare   { $$ = (char*)($1); }
-
-        |   array_ref       { $$ = (char*)($1); }
-
-        |   invocation      { $$ = (char*)($1); }
+//        |   array_declare   { $$ = (char*)($1); }
+//
+//        |   array_ref       { $$ = (char*)($1); }
+//
+        |   invocation
 
         |   SUB expr %prec UMINUS
             {
-                if ((char*)($2) == "integer" || (char*)($2) == "real" || (char*)($2)== "str") $$ = (char*)($2);
+                if (($2)->valueType == "int" || ($2)->valueType == "real"){
+                    Symbol* r = new Symbol();
+                    r->scope = scopeTemp;
+                    r->value = ($2)->value;
+                    r->valueType = ($2)->valueType;
+                    r->flag = "expr";
+                    r->name = ($2)->name;
+
+                    if(($2)->localidx == -1 && ($2)->flag == "variable") getGlobalIntVar(($2)->name);
+                    else if(($2)->localidx != -1 && ($2)->flag == "variable") getLocalVar(($2)->localidx);
+                    else getConst(($2)->value.intVal);
+                    negative();
+
+                    $$ = r;
+                }
+                
                 else cout<<"<type error: UMINUS type error>\n";
+                
             }
 
         |   expr ADD expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: ADD type incompatable>\n";
-                if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
-                else $$ = (char*)($1);
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: ADD type incompatable>\n";
+                //else if(($1)->valueType == "real" || ($3)->valueType == "real") $$ = (char*)"real";
+
+                Symbol* r = new Symbol();
+                r->scope = scopeTemp;
+                r->valueType = ($1)->valueType;
+                r->flag = "expr";
+                if(localFlag){
+                    if(($1)->flag != "function"){
+                        if(($1)->valueType == "int"){
+                            if(($1)->flag != "expr"){
+                                if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                                else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                                else getLocalVar(($1)->localidx);
+                            }
+                        }
+                        if(($1)->valueType == "boolean"){
+                            if(($1)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+
+                    if(($3)->flag != "function"){
+                        if(($3)->valueType == "int"){
+                            if(($3)->flag != "expr"){
+                                if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                                else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                                else getLocalVar(($3)->localidx);
+                            }
+                        }
+                        if(($3)->valueType == "boolean"){
+                            if(($3)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+                    getOperator(IADD);
+                }
+                else{
+                    if(($1)->flag == "constant" && ($3)->flag == "constant"){
+                        r->value.intVal = ($1)->value.intVal + ($3)->value.intVal;
+                        r->flag = "constant";
+                    }
+                    else{
+                        if(($1)->flag == "variable"){
+                            if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                        else if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        
+                        if(($3)->flag == "variable"){
+                            if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                            
+                        }
+                        else if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        getOperator(IADD);
+                    }
+                    
+                }
+                $$ = r;
             }
 
         |   expr SUB expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: SUB type incompatable>\n";
-                if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
-                else $$ = (char*)($1);
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: SUB type incompatable>\n";
+                //else if(($1)->valueType == "real" || ($3)->valueType == "real") $$ = (char*)"real";
+
+                Symbol* r = new Symbol();
+                r->scope = scopeTemp;
+                r->valueType = ($1)->valueType;
+                r->flag = "expr";
+                if(localFlag){
+                    if(($1)->flag != "function"){
+                        if(($1)->valueType == "int"){
+                            if(($1)->flag != "expr"){
+                                if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                                else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                                else getLocalVar(($1)->localidx);
+                            }
+                        }
+                        if(($1)->valueType == "boolean"){
+                            if(($1)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+
+                    if(($3)->flag != "function"){
+                        if(($3)->valueType == "int"){
+                            if(($3)->flag != "expr"){
+                                if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                                else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                                else getLocalVar(($3)->localidx);
+                            }
+                        }
+                        if(($3)->valueType == "boolean"){
+                            if(($3)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+                    getOperator(ISUB);
+                }
+                else{
+                    if(($1)->flag == "constant" && ($3)->flag == "constant"){
+                        r->value.intVal = ($1)->value.intVal - ($3)->value.intVal;
+                        r->flag = "constant";
+                    }
+                    else{
+                        if(($1)->flag == "variable"){
+                            if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                        else if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        
+                        if(($3)->flag == "variable"){
+                            if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                            
+                        }
+                        else if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        getOperator(ISUB);
+                    }
+                    
+                }
+                $$ = r;
             }
 
         |   expr MUL expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: MUL type incompatable>\n";
-                if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
-                else $$ = (char*)($1);
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: MUL type incompatable>\n";
+                //else if(($1)->valueType == "real" || ($3)->valueType == "real") $$ = (char*)"real";
+
+                Symbol* r = new Symbol();
+                r->scope = scopeTemp;
+                r->valueType = ($1)->valueType;
+                r->flag = "expr";
+                if(localFlag){
+                    if(($1)->flag != "function"){
+                        if(($1)->valueType == "int"){
+                            if(($1)->flag != "expr"){
+                                if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                                else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                                else getLocalVar(($1)->localidx);
+                            }
+                        }
+                        if(($1)->valueType == "boolean"){
+                            if(($1)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+
+                    if(($3)->flag != "function"){
+                        if(($3)->valueType == "int"){
+                            if(($3)->flag != "expr"){
+                                if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                                else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                                else getLocalVar(($3)->localidx);
+                            }
+                        }
+                        if(($3)->valueType == "boolean"){
+                            if(($3)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+                    getOperator(IMUL);
+                }
+                else{
+                    if(($1)->flag == "constant" && ($3)->flag == "constant"){
+                        r->value.intVal = ($1)->value.intVal * ($3)->value.intVal;
+                        r->flag = "constant";
+                    }
+                    else{
+                        if(($1)->flag == "variable"){
+                            if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                        else if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        
+                        if(($3)->flag == "variable"){
+                            if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                            
+                        }
+                        else if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        getOperator(IMUL);
+                    }
+                    
+                }
+                $$ = r;
             }
 
         |   expr DIV expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: DIV type incompatable>\n";
-                if((char*)($1) == "real" || (char*)($3) == "real") $$ = (char*)"real";
-                else $$ = (char*)($1);
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: DIV type incompatable>\n";
+                //else if(($1)->valueType == "real" || ($3)->valueType == "real") $$ = (char*)"real";
+
+                Symbol* r = new Symbol();
+                r->scope = scopeTemp;
+                r->valueType = ($1)->valueType;
+                r->flag = "expr";
+                if(localFlag){
+                    if(($1)->flag != "function"){
+                        if(($1)->valueType == "int"){
+                            if(($1)->flag != "expr"){
+                                if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                                else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                                else getLocalVar(($1)->localidx);
+                            }
+                        }
+                        if(($1)->valueType == "boolean"){
+                            if(($1)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+
+                    if(($3)->flag != "function"){
+                        if(($3)->valueType == "int"){
+                            if(($3)->flag != "expr"){
+                                if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                                else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                                else getLocalVar(($3)->localidx);
+                            }
+                        }
+                        if(($3)->valueType == "boolean"){
+                            if(($3)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+                    getOperator(IDIV);
+                }
+                else{
+                    if(($1)->flag == "constant" && ($3)->flag == "constant"){
+                        r->value.intVal = ($1)->value.intVal / ($3)->value.intVal;
+                        r->flag = "constant";
+                    }
+                    else{
+                        if(($1)->flag == "variable"){
+                            if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                        else if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        
+                        if(($3)->flag == "variable"){
+                            if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                            
+                        }
+                        else if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        getOperator(IDIV);
+                    }
+                    
+                }
+                $$ = r;
             }
 
         |   expr MOD expr
             {
-                if((char*)($1) == "str" || (char*)($3) == "str") cout<<"<type error: MOD type incompatable>\n";
-                else $$ = (char*)($1);
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: MOD type incompatable>\n";
+                //else if(($1)->valueType == "real" || ($3)->valueType == "real") $$ = (char*)"real";
+
+                Symbol* r = new Symbol();
+                r->scope = scopeTemp;
+                r->valueType = ($1)->valueType;
+                r->flag = "expr";
+                if(localFlag){
+                    if(($1)->flag != "function"){
+                        if(($1)->valueType == "int"){
+                            if(($1)->flag != "expr"){
+                                if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                                else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                                else getLocalVar(($1)->localidx);
+                            }
+                        }
+                        if(($1)->valueType == "boolean"){
+                            if(($1)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+
+                    if(($3)->flag != "function"){
+                        if(($3)->valueType == "int"){
+                            if(($3)->flag != "expr"){
+                                if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                                else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                                else getLocalVar(($3)->localidx);
+                            }
+                        }
+                        if(($3)->valueType == "boolean"){
+                            if(($3)->value.boolVal){
+                                pushBool(1);
+                            }
+                            else{
+                                pushBool(0);
+                            }
+                        }
+                    }
+                    getOperator(IMOD);
+                }
+                else{
+                    if(($1)->flag == "constant" && ($3)->flag == "constant"){
+                        r->value.intVal = ($1)->value.intVal % ($3)->value.intVal;
+                        r->flag = "constant";
+                    }
+                    else{
+                        if(($1)->flag == "variable"){
+                            if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                        else if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        
+                        if(($3)->flag == "variable"){
+                            if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                            
+                        }
+                        else if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        getOperator(IMOD);
+                    }
+                    
+                }
+                $$ = r;
             }
 
         |   expr GT expr
             {
-                if((char*)($1) != (char*)($3)) cout<<"<type error: GT type incompatable>\n";
-                $$ = (char*)"boolean";
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: GT type incompatable>\n";
+                Symbol* r = new Symbol();
+                r->flag = "bool expr";
+                if(($1)->flag != "function"){
+                    if(($1)->valueType == "str"){
+                        if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                        else getLocalVar(($1)->localidx);
+                    }
+                    if(($1)->valueType == "int"){
+                        if(($1)->flag != "expr"){
+                            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                            else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                    }
+                    if(($1)->valueType == "boolean"){
+                        if(($1)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                if(($3)->flag != "function"){
+                    if(($3)->valueType == "str"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                        else getLocalVar(($3)->localidx);
+                    }
+                    if(($3)->valueType == "int"){
+                        if(($3)->flag != "expr"){
+                            if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                            else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                        }
+                    }
+                    if(($3)->valueType == "boolean"){
+                        if(($3)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+                condExpr(CONDGT, branchCount);
+                branchCount += 2;
+                $$ = r;
             }
 
         |   expr GE expr
             {
-                if((char*)($1) != (char*)($3)) cout<<"<type error: GE type incompatable>\n";
-                $$ = (char*)"boolean";
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: GE type incompatable>\n";
+                Symbol* r = new Symbol();
+                r->flag = "bool expr";
+                if(($1)->flag != "function"){
+                    if(($1)->valueType == "str"){
+                        if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                        else getLocalVar(($1)->localidx);
+                    }
+                    if(($1)->valueType == "int"){
+                        if(($1)->flag != "expr"){
+                            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                            else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                    }
+                    if(($1)->valueType == "boolean"){
+                        if(($1)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                if(($3)->flag != "function"){
+                    if(($3)->valueType == "str"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                        else getLocalVar(($3)->localidx);
+                    }
+                    if(($3)->valueType == "int"){
+                        if(($3)->flag != "expr"){
+                            if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                            else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                        }
+                    }
+                    if(($3)->valueType == "boolean"){
+                        if(($3)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+                condExpr(CONDGE, branchCount);
+                branchCount += 2;
+                $$ = r;
             }
 
         |   expr LT expr
             {
-                if((char*)($1) != (char*)($3)) cout<<"<type error: LT type incompatable>\n";
-                $$ = (char*)"boolean";
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: LT type incompatable>\n";
+                Symbol* r = new Symbol();
+                r->flag = "bool expr";
+                if(($1)->flag != "function"){
+                    if(($1)->valueType == "str"){
+                        if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                        else getLocalVar(($1)->localidx);
+                    }
+                    if(($1)->valueType == "int"){
+                        if(($1)->flag != "expr"){
+                            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                            else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                    }
+                    if(($1)->valueType == "boolean"){
+                        if(($1)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                if(($3)->flag != "function"){
+                    if(($3)->valueType == "str"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                        else getLocalVar(($3)->localidx);
+                    }
+                    if(($3)->valueType == "int"){
+                        if(($3)->flag != "expr"){
+                            if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                            else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                        }
+                    }
+                    if(($3)->valueType == "boolean"){
+                        if(($3)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+                condExpr(CONDLT, branchCount);
+                branchCount += 2;
+                $$ = r;
             }
 
         |   expr LE expr
             {
-                if((char*)($1) != (char*)($3)) cout<<"<type error: LE type incompatable>\n";
-                $$ = (char*)"boolean";
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: LE type incompatable>\n";
+                Symbol* r = new Symbol();
+                r->flag = "bool expr";
+                if(($1)->flag != "function"){
+                    if(($1)->valueType == "str"){
+                        if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                        else getLocalVar(($1)->localidx);
+                    }
+                    if(($1)->valueType == "int"){
+                        if(($1)->flag != "expr"){
+                            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                            else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                    }
+                    if(($1)->valueType == "boolean"){
+                        if(($1)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                if(($3)->flag != "function"){
+                    if(($3)->valueType == "str"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                        else getLocalVar(($3)->localidx);
+                    }
+                    if(($3)->valueType == "int"){
+                        if(($3)->flag != "expr"){
+                            if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                            else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                        }
+                    }
+                    if(($3)->valueType == "boolean"){
+                        if(($3)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+                condExpr(CONDLE, branchCount);
+                branchCount += 2;
+                $$ = r;
             }
 
         |   expr EQ expr
             {
-                if((char*)($1) != (char*)($3)) cout<<"<type error: EQ type incompatable>\n";
-                $$ = (char*)"boolean";
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: EQ type incompatable>\n";
+                Symbol* r = new Symbol();
+                r->flag = "bool expr";
+                
+                if(($1)->flag != "function"){
+                    if(($1)->valueType == "str"){
+                        if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                        else getLocalVar(($1)->localidx);
+                    }
+                    if(($1)->valueType == "int"){
+                        if(($1)->flag != "expr"){
+                            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                            else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                    }
+                    if(($1)->valueType == "boolean"){
+                        if(($1)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                if(($3)->flag != "function"){
+                    if(($3)->valueType == "str"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                        else getLocalVar(($3)->localidx);
+                    }
+                    if(($3)->valueType == "int"){
+                        if(($3)->flag != "expr"){
+                            if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                            else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                        }
+                    }
+                    if(($3)->valueType == "boolean"){
+                        if(($3)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+                condExpr(CONDEQ, branchCount);
+                branchCount += 2;
+                $$ = r;
             }
 
         |   expr NE expr
             {
-                if((char*)($1) != (char*)($3)) cout<<"<type error: NE type incompatable>\n";
-                $$ = (char*)"boolean";
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: NE type incompatable>\n";
+                Symbol* r = new Symbol();
+                r->flag = "bool expr";
+                if(($1)->flag != "function"){
+                    if(($1)->valueType == "str"){
+                        if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                        else getLocalVar(($1)->localidx);
+                    }
+                    if(($1)->valueType == "int"){
+                        if(($1)->flag != "expr"){
+                            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                            else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                    }
+                    if(($1)->valueType == "boolean"){
+                        if(($1)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                if(($3)->flag != "function"){
+                    if(($3)->valueType == "str"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                        else getLocalVar(($3)->localidx);
+                    }
+                    if(($3)->valueType == "int"){
+                        if(($3)->flag != "expr"){
+                            if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                            else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                        }
+                    }
+                    if(($3)->valueType == "boolean"){
+                        if(($3)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+                condExpr(CONDNE, branchCount);
+                branchCount += 2;
+                $$ = r;
             }
 
         |   expr AND expr
             {
-                if((char*)($1) != (char*)($3)) cout<<"<type error: AND type incompatable>\n";
-                $$ = (char*)"boolean";
+                //if(($1)->valueType != (char*)"boolean" || ($3)->valueType != (char*)"boolean") cout<<"<type error: AND must be boolean>\n";
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: AND type incompatable>\n";
+                //else if(($1)->valueType == "real" || ($3)->valueType == "real") $$ = (char*)"real";
+
+                Symbol* r = new Symbol();
+                r->scope = scopeTemp;
+                r->valueType = (char*)"boolean";
+                r->flag = "bool expr";
+                if(($1)->value.boolVal != ($3)->value.boolVal) r->value.boolVal = false;
+                else r->value.boolVal = true;
+                if(($1)->flag != "function"){
+                    if(($1)->valueType == "str"){
+                        if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                        else getLocalVar(($1)->localidx);
+                    }
+                    if(($1)->valueType == "int"){
+                        if(($1)->flag != "expr"){
+                            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                            else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                    }
+                    if(($1)->valueType == "boolean"){
+                        if(($1)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                if(($3)->flag != "function"){
+                    if(($3)->valueType == "str"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                        else getLocalVar(($3)->localidx);
+                    }
+                    if(($3)->valueType == "int"){
+                        if(($3)->flag != "expr"){
+                            if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                            else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                        }
+                    }
+                    if(($3)->valueType == "boolean"){
+                        if(($3)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+                
+                getOperator(IAND);
+                $$ = r;
             }
 
         |   expr OR expr
             {
-                if((char*)($1) != (char*)($3)) cout<<"<type error: OR type incompatable>\n";
-                $$ = (char*)"boolean";
+                if(($1)->valueType != ($3)->valueType) cout<<"<type error: OR type incompatable>\n";
+                //else if(($1)->valueType == "real" || ($3)->valueType == "real") $$ = (char*)"real";
+
+                Symbol* r = new Symbol();
+                r->scope = scopeTemp;
+                r->valueType = (char*)"boolean";
+                r->flag = "bool expr";
+                if(($1)->value.boolVal || ($3)->value.boolVal) r->value.boolVal = true;
+                else r->value.boolVal = false;
+                if(($1)->flag != "function"){
+                    if(($1)->valueType == "str"){
+                        if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                        else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                        else getLocalVar(($1)->localidx);
+                    }
+                    if(($1)->valueType == "int"){
+                        if(($1)->flag != "expr"){
+                            if(($1)->flag == "constant") getConst(($1)->value.intVal);
+                            else if(($1)->localidx == -1) getGlobalIntVar(($1)->name);
+                            else getLocalVar(($1)->localidx);
+                        }
+                    }
+                    if(($1)->valueType == "boolean"){
+                        if(($1)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                if(($3)->flag != "function"){
+                    if(($3)->valueType == "str"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                        else getLocalVar(($3)->localidx);
+                    }
+                    if(($3)->valueType == "int"){
+                        if(($3)->flag != "expr"){
+                            if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                            else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                            else getLocalVar(($3)->localidx);
+                        }
+                    }
+                    if(($3)->valueType == "boolean"){
+                        if(($3)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                getOperator(IOR);
+                $$ = r;
             }
 
         |   NOT expr
             {
-                if((char*)($2) != "boolean") cout<<"<type error: NOT expression only allows boolean type>\n";
-                $$ = (char*)"boolean";
+                if(($2)->valueType != (char*)"boolean") cout<<"<type error: NOT type incompatable>\n";
+                //else if(($1)->valueType == "real" || ($3)->valueType == "real") $$ = (char*)"real";
+
+                Symbol* r = new Symbol();
+                r->scope = scopeTemp;
+                r->valueType = (char*)"boolean";
+                r->flag = "bool expr";
+                if(($2)->flag != "function"){
+                    if(($2)->valueType == "str"){
+                        if(($2)->flag == "constant") getConst(($2)->value.intVal);
+                        else if(($2)->localidx == -1) getGlobalIntVar(($2)->name);
+                        else getLocalVar(($2)->localidx);
+                    }
+                    if(($2)->valueType == "int"){
+                        if(($2)->flag != "expr"){
+                            if(($2)->flag == "constant") getConst(($2)->value.intVal);
+                            else if(($2)->localidx == -1) getGlobalIntVar(($2)->name);
+                            else getLocalVar(($2)->localidx);
+                        }
+                    }
+                    if(($2)->valueType == "boolean"){
+                        if(($2)->value.boolVal){
+                            pushBool(1);
+                        }
+                        else{
+                            pushBool(0);
+                        }
+                    }
+                }
+
+                if(($2)->value.boolVal == true) pushBool(1);
+                else pushBool(0);
+                getOperator(INOT);
+                ($2)->value.boolVal = !($2)->value.boolVal;
+                r->value.boolVal = ($2)->value.boolVal;
+                $$ = r;
             }
 
         |   PARENTHESES_L expr PARENTHESES_R
             {
-                $$ = (char*)($2);
+                $$ = ($2);
             }
         ;
 
-bool_expr:  
-            expr 
-            {  
-                if((char*)($1) != "boolean") cout<<"<type error: not boolean>\n";
-            };
+//bool_expr:  
+//            expr 
+//            {  
+//                if(($1)->valueType != (char*)"boolean") cout<<"<type error: not boolean>\n";
+//            };
 
 /*statement*/
-opt:    const_declare | var_declare | func_declare | proc_declare | array_declare | block;
-opts:    opt | opt opts;
+opt:    const_declare opt | var_declare opt | func_declare opt | proc_declare opt
+        | 
+        {
+            if(scopeTemp == "global" && mainFlag == 0){
+                mainFlag = 1;
+                mainFunc();
+            }
+        }
+        block opt 
+        |
+        {
+            if(scopeTemp == "global" && mainFlag == 0){
+                mainFlag = 1;
+                mainFunc();
+            }
+        }
+        stmt opt
+        |
+        {
+            if(scopeTemp == "global" && mainFlag == 0){
+                mainFlag = 1;
+                mainFunc();
+            }
+        }
+        %empty;
 
-stmts:  stmt | stmt stmts;
+//opts:    opt | opt opts;
+//
+//stmts:  stmt | stmt stmts;
 
 stmt:   
         simple_stmt
@@ -379,22 +1449,100 @@ stmt:
 simple_stmt:
         ID ASSIGN expr
         {
-            Symbol* id_d = table->getItem(scopeTemp, string($1));
-            if(id_d->valueType != (char*)($3)) cout<<"<warning: type implicit conversion>\n";
+            Symbol* id_d = table->getItem(string($1));
+            if(id_d->flag == "constant") cout<<"<error: assigment to constant variable not permitted.>\n";
+            if(id_d->valueType != ($3)->valueType) cout<<"<warning: type implicit conversion>\n";
+            if(id_d == nullptr) cout << "<error: id not found.>\n";
+
+            /*if(($3)->flag == "variable" && ($3)->valueType == (char*)"int"){
+                if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                else getLocalVar(($3)->localidx); 
+            }
+            if(($3)->valueType == (char*)"int" && ($3)->flag == "constant") getConst(($3)->value.intVal);
+            if(($3)->valueType == (char*)"boolean" && ($3)->flag != "bool expr"){
+                if(($3)->value.boolVal) pushBool(1);
+                else pushBool(0);
+            }*/
+
+            if(($3)->flag != "function"){
+                if(($3)->valueType == "str"){
+                    storeString(($3)->value.strVal);
+                }
+                if(($3)->valueType == "int"){
+                    if(($3)->flag != "expr"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                        else getLocalVar(($3)->localidx);
+                    }
+                }
+                if(($3)->valueType == "boolean"){
+                    if(($3)->value.boolVal){
+                        pushBool(1);
+                    }
+                    else{
+                        pushBool(0);
+                    }
+                }
+            }            
+
+            if(id_d->localidx == -1) storeGlobalVar(id_d->name, id_d->valueType);
+            else storeLocalVar(id_d->localidx);
         }
+//        |
+//        array_ref ASSIGN expr
+//        {
+//            if(($1)->valueType != ($3)->valueType) cout<< "<type error: array must be " << ($1)->valueType << ">\n";
+//        }
         |
-        array_ref ASSIGN expr
+        PUT
         {
-            if((char*)($1) != (char*)($3)) cout<<"<type error: array assign denied>\n";
+            putstmt();
         }
-        |
-        PUT expr
+        expr
+        {
+            //cout << "put check: " << ($3)->valueType <<"\n";
+            if(($3)->flag != "function"){
+                if(($3)->valueType == "str"){
+                    putstr(($3)->value.strVal);
+                    if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                    else if(($3)->localidx == -1) getGlobalIntVar(($3)->name);
+                    else getLocalVar(($3)->localidx);
+                }
+                if(($3)->valueType == "int"){
+                    if(($3)->flag != "expr"){
+                        if(($3)->flag == "constant") getConst(($3)->value.intVal);
+                        else if(($3)->localidx == -1 && ($3)->flag == "variable") getGlobalIntVar(($3)->name);
+                        else if(($3)->localidx != -1 && ($3)->flag == "variable") getLocalVar(($3)->localidx);
+                    }
+                    putint();
+                }
+                if(($3)->valueType == "boolean"){
+                    if(($3)->value.boolVal){
+                        pushBool(1);
+                    }
+                    else{
+                        pushBool(0);
+                    }
+                    putint();
+                }
+            }
+            else putint();
+            if(($3)->flag == "bool expr") putBool();
+
+        }
         |
         GET ID
         |
         RESULT expr
         {
-            returnType = string($2);
+            returnType = (string)($2)->valueType;
+            if(($2)->flag != "expr") {
+                if(($2)->flag == "constant") getConst(($2)->value.intVal);
+                else{
+                    if(($2)->scope != "global" && ($2)->flag == "variable") getLocalVar(($2)->localidx);
+                    else if(($2)->scope == "global") getGlobalIntVar(($2)->name);
+                }
+            }
         }
         |
         RETURN
@@ -402,75 +1550,240 @@ simple_stmt:
             returnType = "void";
         }
         |
-        EXIT WHEN bool_expr
+        EXIT WHEN expr
+        {
+            loopStmt(CONDEQ, branchStack.top());
+            branchStack.pop();
+        }
         |
         EXIT
         |
         SKIP
+        {
+            skipstmt();
+        }
         ;
 
 conditional_stmt:   IF
                     {
                         scopeTemp = "condition";
                     }
-                    bool_expr THEN opt_empty else_stmt END IF
+                    expr THEN
                     {
-                        scopeTemp = "condition";
-                        table->dump(scopeTemp);
+                        branchStack.push(branchCount + 1);
+                        branchStack.push(branchCount);
+                        branchStack.push(branchCount + 1);
+                        branchStack.push(branchCount);
+                        branchCount += 2;
+
+                        condStmt(branchStack.top());
+                        branchStack.pop();
+                    }
+                    opt else_stmt
+                    {
+                        if(elseFlag) condStmtEnd(branchStack.top());
+                        branchStack.pop();
+                    }
+                    END IF
+                    {
+                        table->dump("condition");
                     };
 
-else_stmt: ELSE opt_blocks | %empty;
+else_stmt:  ELSE
+            {
+                elseFlag = 1;
+
+                int gotoL = branchStack.top();
+                branchStack.pop();
+                int curL = branchStack.top();
+                branchStack.pop();
+                elseStmt(gotoL, curL);
+            }
+            opt
+            | %empty;
 
 loop:   LOOP
         {
             scopeTemp = "loop";
+            branchStack.push(branchCount + 1);
+            branchStack.push(branchCount);
+            branchStack.push(branchCount + 1);
+            branchStack.push(branchCount);
+            branchCount += 2;
+
+            loopStart(branchStack.top());
+            branchStack.pop();
         }
-        opt_empty END LOOP
+        opt END LOOP
         {
-            scopeTemp = "loop";
-            table->dump(scopeTemp);
+            int gotoL = branchStack.top();
+            branchStack.pop();
+            int curL = branchStack.top();
+            branchStack.pop();
+            loopEnd(gotoL, curL);
         };
 
 for_loop:
-            FOR
+            FOR ID COLON expr DOT DOT expr
             {
+                pre_scope = scopeTemp;
                 scopeTemp = "for_loop";
+                if(($4)->value.intVal > ($7)->value.intVal) cout << "<error: loop condition must be increasing>\n";
+                Symbol* loopC = table->getItem(string($2));
+                if(loopC == nullptr) cout << "<error: " << string($2) << " not declared.>\n";
+                if(($4)->valueType != (char*)"int") cout << "<type error: wrong type for loop condition.>\n";
+                if(($7)->valueType != (char*)"int") cout << "<type error: wrong type for loop condition.>\n";
+
+                if(($4)->flag == "constant") getConst(($4)->value.intVal);
+                else if(($4)->flag == "variable"){
+                    if(($4)->scope == "global") getGlobalIntVar(($4)->name);
+                    else getLocalVar(($4)->localidx);
+                }
+                storeGlobalVar(loopC->name, (string)loopC->valueType);
+
+                branchStack.push(branchCount + 1);
+                branchStack.push(branchCount);
+                branchStack.push(branchCount + 1);
+                branchStack.push(branchCount);
+                branchCount += 2;
+                forLoopStart(branchStack.top());
+                branchStack.pop();
             }
-            ID COLON expr DOT DOT expr opt_empty END FOR
+            opt
             {
-                scopeTemp = "for_loop";
-                table->dump(scopeTemp);
+                if(($7)->flag != "expr"){
+                    if(($7)->flag == "constant") getConst(($7)->value.intVal);
+                    else if(($7)->localidx == -1 && ($7)->flag == "variable") getGlobalIntVar(($7)->name);
+                    else if(($7)->localidx != -1 && ($7)->flag == "variable") getLocalVar(($7)->localidx);
+                }
+
+                Symbol* loopC = table->getItem(string($2));
+                if(loopC != nullptr){
+                    if(loopC->localidx == -1) getGlobalIntVar(string($2));
+                    else getLocalVar(loopC->localidx);
+                }
+
+                assFile << "isub\n";
+                assFile << "ifeq L" << branchStack.top() << "\n";
+                branchStack.pop();
+
+                assFile << "iconst_1\n";
+                if(loopC != nullptr){
+                    if(loopC->localidx == -1) getGlobalIntVar(string($2));
+                    else getLocalVar(loopC->localidx);
+                }
+
+                assFile << "iadd\n";
+                if(loopC != nullptr){
+                    if(loopC->localidx == -1) storeGlobalVar(string($2), (string)loopC->valueType);
+                    else storeLocalVar(loopC->localidx);
+                }
+
+                int gotoL = branchStack.top();
+                branchStack.pop();
+                int curL = branchStack.top();
+                branchStack.pop();
+
+                forLoopEnd(gotoL, curL);
+            }
+            END FOR
+            {
+                table->dump("for_loop");
             }
             |
-            FOR
+            FOR DECREASING ID COLON expr DOT DOT expr
             {
+                pre_scope = scopeTemp;
                 scopeTemp = "decreasing_loop";
+                if(($5)->value.intVal < ($8)->value.intVal) cout << "<error: loop condition must be decreasing>\n";
+
+                Symbol* loopC = table->getItem(string($3));
+                if(loopC == nullptr) cout << "<error: " << string($3) << " not declared.>\n";
+                if(($5)->valueType != (char*)"int") cout << "<type error: wrong type for loop condition.>\n";
+                if(($8)->valueType != (char*)"int") cout << "<type error: wrong type for loop condition.>\n";
+
+                if(($5)->flag == "constant") getConst(($5)->value.intVal);
+                else{
+                    if(($5)->scope == "global") getGlobalIntVar(($5)->name);
+                    else getLocalVar(($5)->localidx);
+                }
+
+                branchStack.push(branchCount + 1);
+                branchStack.push(branchCount);
+                branchStack.push(branchCount + 1);
+                branchStack.push(branchCount);
+                branchCount += 2;
+                forLoopStart(branchStack.top());
+                branchStack.pop();
+            } 
+            opt
+            {
+                if(($8)->flag != "expr"){
+                    if(($8)->flag == "constant") getConst(($8)->value.intVal);
+                    else if(($8)->localidx == -1 && ($8)->flag == "variable") getGlobalIntVar(($8)->name);
+                    else if(($8)->localidx != -1 && ($8)->flag == "variable") getLocalVar(($8)->localidx);
+                }
+
+                Symbol* loopC = table->getItem(string($3));
+                if(loopC != nullptr){
+                    if(loopC->localidx == -1) getGlobalIntVar(string($3));
+                    else getLocalVar(loopC->localidx);
+                }
+
+                assFile << "isub\n";
+                assFile << "ifeq L" << branchStack.top() << "\n";
+                branchStack.pop();
+
+                assFile << "iconst_1\n";
+                if(loopC != nullptr){
+                    if(loopC->localidx == -1) getGlobalIntVar(string($3));
+                    else getLocalVar(loopC->localidx);
+                }
+
+                assFile << "isub\n";
+                if(loopC != nullptr){
+                    if(loopC->localidx == -1) getGlobalIntVar(string($3));
+                    else getLocalVar(loopC->localidx);
+                }
+
+                int gotoL = branchStack.top();
+                branchStack.pop();
+                int curL = branchStack.top();
+                branchStack.pop();
+
+                forLoopEnd(gotoL, curL);
             }
-            DECREASING ID COLON expr DOT DOT expr opt_empty END FOR
+            END FOR
             {
-                scopeTemp = "decreasing_loop";
-                table->dump(scopeTemp);
+                table->dump("decreasing_loop");
             }
             ;
 
 invocation:
-            ID PARENTHESES_L arguments_empty PARENTHESES_R
+            ID PARENTHESES_L
             {
-                if(countPara(scopeTemp) != countArgu(scopeTemp)) cout<<"<Exception: Incorrect number of arguments>\n";
+                func_name = string($1);
+            }
+            arguments_empty PARENTHESES_R
+            {
+                if(countPara((string)($1)) != countArgu((string)($1))) cout<<"<Exception: Incorrect number of arguments>\n";
                 for(auto i: parameter_vector){
                     for(auto j: argument_vector){
                         if(i.scope != j.scope) continue;
                         if(i.valueType != j.valueType) cout<<"<type error: parameter type mismatch>\n";
                     }
                 }
-                
-                Symbol* temp = table->getItem("global", scopeTemp);
+                //show();
+                Symbol* temp = table->getItem((string)($1));
                 if(temp == nullptr) cout<<"<Invocation error: symbol not found>\n";
-                $$ = (char*)(temp->valueType);
-            };
+                funcInvoke(temp->name, temp->valueType, arguTypes);
+                
+                $$ = temp;
+            }
+            ;
 
+arguments_empty: params;
 
-arguments_empty: %empty | exprs;
 
 %%
 
@@ -488,10 +1801,18 @@ int main(int argc, char* argv[])
     }
     yyin = fopen(argv[1], "r");         /* open input file */
 
+    /* java file */
+    string fileName = string(argv[1]);
+    className = fileName.substr(0, fileName.find(".st"));
+    assFile.open(className + ".jasm");
+    programStart(className);
+
     /* perform parsing */
     if (yyparse() == 1)                 /* parsing */
         yyerror("Parsing error !");     /* syntax error */
-    
+
     table->dump("global");
+    if(mainFlag == 1) mainEnd();
+    programEnd();
     return 0;
 }
